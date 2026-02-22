@@ -1,0 +1,5 @@
+[workspace]
+members = ["klave-core"]
+resolver = "2"
+
+[workspace.dependencies]
