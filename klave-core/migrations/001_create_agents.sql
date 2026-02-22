@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS agents (
+    id TEXT PRIMARY KEY NOT NULL,
+    pubkey TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    policy_id TEXT NOT NULL
+);
