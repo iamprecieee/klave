@@ -25,4 +25,10 @@ pub enum KlaveError {
 
     #[error("migration error: {0}")]
     Migration(#[from] sqlx::migrate::MigrateError),
+
+    #[error("internal error: {0}")]
+    Internal(String),
+
+    #[error("RPC error: {0}")]
+    RpcError(String),
 }

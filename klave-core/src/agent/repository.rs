@@ -1,3 +1,4 @@
+use solana_sdk::signature::{Keypair, Signer};
 use sqlx::SqlitePool;
 
 use crate::agent::model::{Agent, AgentPolicy, AgentPolicyInput, CreateAgentRequest};
@@ -17,9 +18,9 @@ impl AgentRepository {
         let policy_id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().timestamp();
 
-        // Placeholder pubkey until Solana integration in Phase 2.
-        // This will be replaced by actual keypair generation.
-        let pubkey = format!("klave_{}", &agent_id[..8]);
+        let keypair = Keypair::new();
+        let pubkey = keypair.pubkey().to_string();
+        let encrypted_keypair = keypair.to_bytes().to_vec();
 
         let allowed_programs_json = serde_json::to_string(&req.policy.allowed_programs)?;
         let token_allowlist_json = serde_json::to_string(&req.policy.token_allowlist)?;
@@ -27,14 +28,15 @@ impl AgentRepository {
             serde_json::to_string(&req.policy.withdrawal_destinations)?;
 
         sqlx::query(
-            "INSERT INTO agents (id, pubkey, label, is_active, created_at, policy_id) \
-             VALUES (?, ?, ?, 1, ?, ?)",
+            "INSERT INTO agents (id, pubkey, label, is_active, created_at, policy_id, encrypted_keypair) \
+             VALUES (?, ?, ?, 1, ?, ?, ?)",
         )
         .bind(&agent_id)
         .bind(&pubkey)
         .bind(&req.label)
         .bind(now)
         .bind(&policy_id)
+        .bind(&encrypted_keypair)
         .execute(&self.pool)
         .await?;
 
@@ -156,6 +158,19 @@ impl AgentRepository {
         self.find_policy(agent_id)
             .await?
             .ok_or_else(|| KlaveError::PolicyNotFound(agent_id.to_string()))
+    }
+
+    pub async fn get_keypair(&self, id: &str) -> Result<Vec<u8>, KlaveError> {
+        let row: Option<(Vec<u8>,)> =
+            sqlx::query_as("SELECT encrypted_keypair FROM agents WHERE id = ?")
+                .bind(id)
+                .fetch_optional(&self.pool)
+                .await?;
+
+        match row {
+            Some((bytes,)) => Ok(bytes),
+            None => Err(KlaveError::AgentNotFound(id.to_string())),
+        }
     }
 }
 

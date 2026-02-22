@@ -8,7 +8,9 @@ mod state;
 use std::sync::Arc;
 
 use klave_core::agent::repository::AgentRepository;
+use klave_core::agent::signer::AgentSigner;
 use klave_core::audit::store::AuditStore;
+use klave_core::solana::gateway::KoraGateway;
 use tracing::info;
 
 #[tokio::main]
@@ -31,10 +33,18 @@ async fn main() -> anyhow::Result<()> {
     let agent_repo = Arc::new(AgentRepository::new(pool.clone()));
     let audit_store = Arc::new(AuditStore::new(pool));
 
+    let agent_signer = Arc::new(AgentSigner::new(agent_repo.clone()));
+    let kora_gateway = Arc::new(KoraGateway::new(
+        config.kora_rpc_url.clone(),
+        config.solana_rpc_url.clone(),
+    ));
+
     let state = state::AppState {
         agent_repo,
         audit_store,
         config: Arc::new(config.clone()),
+        agent_signer,
+        kora_gateway,
     };
 
     let app = router::build_router(state);

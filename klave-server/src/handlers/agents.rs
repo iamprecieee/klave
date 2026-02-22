@@ -100,25 +100,58 @@ pub async fn get_agent_history(State(state): State<AppState>, Path(id): Path<Str
 }
 
 pub async fn get_agent_balance(State(state): State<AppState>, Path(id): Path<String>) -> Response {
-    match state.agent_repo.find_by_id(&id).await {
-        Ok(Some(_)) => {
-            // Phase 1 stub. Solana RPC balance queries are wired in Phase 2.
-            let balance = AgentBalance {
-                sol_lamports: 0,
-                vault_lamports: 0,
-            };
-            ApiResponse::success(
-                serde_json::to_value(&balance).expect("balance serialization"),
-                "balance retrieved (stub: Solana RPC integration pending)",
-            )
-            .into_response()
-        }
+    let agent = match state.agent_repo.find_by_id(&id).await {
+        Ok(Some(a)) => a,
         Ok(None) => {
-            ApiResponse::<()>::error(StatusCode::NOT_FOUND, format!("agent not found: {id}"))
-                .into_response()
+            return ApiResponse::<()>::error(
+                StatusCode::NOT_FOUND,
+                format!("agent not found: {id}"),
+            )
+            .into_response();
         }
         Err(e) => {
             error!(error = %e, "failed to find agent");
+            return ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                .into_response();
+        }
+    };
+
+    let agent_pubkey: solana_sdk::pubkey::Pubkey = match std::str::FromStr::from_str(&agent.pubkey)
+    {
+        Ok(pk) => pk,
+        Err(_) => {
+            return ApiResponse::<()>::error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Invalid pubkey".to_string(),
+            )
+            .into_response();
+        }
+    };
+
+    let program_id = solana_sdk::pubkey::Pubkey::new_from_array(klave_anchor::ID.to_bytes());
+    let (vault_pda, _) = solana_sdk::pubkey::Pubkey::find_program_address(
+        &[b"vault", agent_pubkey.as_ref()],
+        &program_id,
+    );
+
+    match state
+        .kora_gateway
+        .get_balances(&agent_pubkey, &vault_pda)
+        .await
+    {
+        Ok((sol_lamports, vault_lamports)) => {
+            let balance = AgentBalance {
+                sol_lamports,
+                vault_lamports,
+            };
+            ApiResponse::success(
+                serde_json::to_value(&balance).unwrap(),
+                "agent balance retrieved",
+            )
+            .into_response()
+        }
+        Err(e) => {
+            error!(error = %e, "failed to fetch balances");
             ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
                 .into_response()
         }

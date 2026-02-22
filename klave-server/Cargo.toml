@@ -16,5 +16,13 @@ tower = { version = "0.5.3", features = ["util"] }
 anyhow = "1.0.98"
 dotenvy = "0.15.7"
 
+klave-anchor = { path = "../klave-anchor/programs/klave-anchor", features = [
+    "cpi",
+] }
+solana-sdk = "3"
+solana-system-interface = { version = "3", features = ["bincode"] }
+solana-keychain = "0.2.1"
+anchor-lang = "0.32.1"
+
 [dev-dependencies]
 reqwest = { version = "0.12.18", features = ["json"] }

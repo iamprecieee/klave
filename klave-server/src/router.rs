@@ -1,8 +1,8 @@
+use axum::Router;
 use axum::middleware;
 use axum::routing::{delete, get, post, put};
-use axum::Router;
 
-use crate::handlers::{agents, health};
+use crate::handlers::{agents, health, transactions};
 use crate::middleware::api_key_auth;
 use crate::state::AppState;
 
@@ -14,6 +14,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/agents/{id}/history", get(agents::get_agent_history))
         .route("/agents/{id}/balance", get(agents::get_agent_balance))
         .route("/agents/{id}/policy", put(agents::update_policy))
+        .route(
+            "/agents/{id}/transactions",
+            post(transactions::execute_transaction),
+        )
         .layer(middleware::from_fn_with_state(state.clone(), api_key_auth))
         .with_state(state);
 
