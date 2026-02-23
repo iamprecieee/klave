@@ -63,21 +63,25 @@ impl KoraGateway {
 
         // Try Kora first
         if !self.kora_rpc_url.is_empty() {
-            if let Ok(resp) = self
+            let res = self
                 .http_client
                 .post(&self.kora_rpc_url)
                 .json(&payload)
                 .send()
-                .await
-            {
-                if resp.status().is_success() {
+                .await;
+
+            match res {
+                Ok(resp) if resp.status().is_success() => {
                     let json: serde_json::Value = resp.json().await.unwrap_or_default();
-                    if let Some(sig_str) = json.get("result").and_then(|r| r.as_str()) {
-                        if let Ok(sig) = sig_str.parse::<Signature>() {
-                            return Ok((sig, true));
-                        }
+                    if let Some(sig) = json
+                        .get("result")
+                        .and_then(|r| r.as_str())
+                        .and_then(|s| s.parse::<Signature>().ok())
+                    {
+                        return Ok((sig, true));
                     }
                 }
+                _ => {}
             }
         }
 

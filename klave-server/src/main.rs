@@ -11,6 +11,7 @@ use klave_core::agent::repository::AgentRepository;
 use klave_core::agent::signer::AgentSigner;
 use klave_core::audit::store::AuditStore;
 use klave_core::solana::gateway::KoraGateway;
+use klave_core::solana::jupiter::JupiterClient;
 use tracing::info;
 
 #[tokio::main]
@@ -39,12 +40,18 @@ async fn main() -> anyhow::Result<()> {
         config.solana_rpc_url.clone(),
     ));
 
+    let jupiter_client = Arc::new(JupiterClient::new(
+        config.jupiter_api_url.clone(),
+        config.jupiter_api_key.clone(),
+    ));
+
     let state = state::AppState {
         agent_repo,
         audit_store,
         config: Arc::new(config.clone()),
         agent_signer,
         kora_gateway,
+        jupiter_client,
     };
 
     let app = router::build_router(state);

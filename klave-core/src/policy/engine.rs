@@ -166,6 +166,60 @@ impl PolicyEngine {
             Err(violations)
         }
     }
+
+    pub fn check_swap_static(
+        policy: &AgentPolicy,
+        input_mint: &str,
+        output_mint: &str,
+        slippage_bps: i32,
+    ) -> Result<(), Vec<PolicyViolation>> {
+        let mut violations = Vec::new();
+
+        if !policy.token_allowlist.contains(&input_mint.to_string()) {
+            violations.push(PolicyViolation::TokenNotAllowed(input_mint.to_string()));
+        }
+
+        if !policy.token_allowlist.contains(&output_mint.to_string()) {
+            violations.push(PolicyViolation::TokenNotAllowed(output_mint.to_string()));
+        }
+
+        if slippage_bps > policy.slippage_bps {
+            violations.push(PolicyViolation::SlippageExceeded {
+                requested_bps: slippage_bps,
+                limit_bps: policy.slippage_bps,
+            });
+        }
+
+        if violations.is_empty() {
+            Ok(())
+        } else {
+            Err(violations)
+        }
+    }
+
+    pub fn check_swap_volume(
+        policy: &AgentPolicy,
+        quote_usd_value: f64,
+        daily_swap_volume_usd: f64,
+    ) -> Result<(), Vec<PolicyViolation>> {
+        let mut violations = Vec::new();
+
+        if policy.daily_swap_volume_usd > 0.0 {
+            let projected_volume = daily_swap_volume_usd + quote_usd_value;
+            if projected_volume > policy.daily_swap_volume_usd {
+                violations.push(PolicyViolation::DailySwapVolumeExceeded {
+                    current_usd: projected_volume,
+                    limit_usd: policy.daily_swap_volume_usd,
+                });
+            }
+        }
+
+        if violations.is_empty() {
+            Ok(())
+        } else {
+            Err(violations)
+        }
+    }
 }
 
 #[cfg(test)]

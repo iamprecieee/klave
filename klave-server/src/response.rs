@@ -28,9 +28,6 @@ impl<T: Serialize> ApiResponse<T> {
             status_code: 201,
         }
     }
-}
-
-impl ApiResponse<()> {
     pub fn error(status: StatusCode, message: impl Into<String>) -> Self {
         Self {
             success: false,
@@ -39,7 +36,9 @@ impl ApiResponse<()> {
             status_code: status.as_u16(),
         }
     }
+}
 
+impl ApiResponse<()> {
     pub fn no_content(message: impl Into<String>) -> Self {
         Self {
             success: true,

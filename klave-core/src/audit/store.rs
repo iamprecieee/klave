@@ -88,13 +88,38 @@ impl AuditStore {
             .timestamp();
 
         let row: (f64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM( \
+            "SELECT CAST(COALESCE(SUM( \
                  CASE WHEN json_valid(metadata) \
                       THEN json_extract(metadata, '$.lamports') \
                       ELSE 0 END \
-             ), 0) as total \
+             ), 0) AS REAL) as total \
              FROM audit_log \
              WHERE agent_id = ? AND status = 'confirmed' AND timestamp >= ?",
+        )
+        .bind(agent_id)
+        .bind(today_start)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(row.0)
+    }
+
+    pub async fn sum_swap_volume(&self, agent_id: &str) -> Result<f64, KlaveError> {
+        let today_start = chrono::Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .expect("valid midnight timestamp")
+            .and_utc()
+            .timestamp();
+
+        let row: (f64,) = sqlx::query_as(
+            "SELECT CAST(COALESCE(SUM( \
+                 CASE WHEN json_valid(metadata) \
+                      THEN json_extract(metadata, '$.usd_volume') \
+                      ELSE 0 END \
+             ), 0) AS REAL) as total \
+             FROM audit_log \
+             WHERE agent_id = ? AND instruction_type = 'token_swap' AND status = 'confirmed' AND timestamp >= ?",
         )
         .bind(agent_id)
         .bind(today_start)

@@ -8,7 +8,10 @@ use klave_anchor::accounts::{Deposit, InitializeVault, Withdraw};
 use klave_anchor::instruction::{
     Deposit as DepInst, InitializeVault as InitInst, Withdraw as WdInst,
 };
-use klave_core::policy::engine::{InstructionType, PolicyEngine, TransactionRequest};
+use klave_core::{
+    audit::store::NewAuditEntry,
+    policy::engine::{InstructionType, PolicyEngine, TransactionRequest},
+};
 use serde::{Deserialize, Serialize};
 use solana_keychain::SolanaSigner;
 use solana_sdk::{
@@ -118,12 +121,13 @@ pub async fn execute_transaction(
         is_active: agent.is_active,
     };
 
+    let payload_amount = payload.amount.unwrap_or(0);
+
     let to_anchor =
         |p: solana_sdk::pubkey::Pubkey| anchor_lang::prelude::Pubkey::new_from_array(p.to_bytes());
 
     match instruction_type {
         InstructionType::SolTransfer | InstructionType::AgentWithdrawal => {
-            let amount = payload.amount.unwrap_or(0);
             let dest_pubkey =
                 match Pubkey::from_str(payload.destination.as_ref().unwrap_or(&"".to_string())) {
                     Ok(pk) => pk,
@@ -139,7 +143,7 @@ pub async fn execute_transaction(
             instructions.push(solana_system_interface::instruction::transfer(
                 &agent_pubkey,
                 &dest_pubkey,
-                amount,
+                payload_amount,
             ));
             policy_req.program_ids.push(SYSTEM_PROGRAM_ID.to_string());
         }
@@ -168,7 +172,6 @@ pub async fn execute_transaction(
             policy_req.program_ids.push(SYSTEM_PROGRAM_ID.to_string());
         }
         InstructionType::DepositToVault => {
-            let amount = payload.amount.unwrap_or(0);
             let accounts = Deposit {
                 vault: to_anchor(vault_pda),
                 agent: to_anchor(agent_pubkey),
@@ -185,13 +188,15 @@ pub async fn execute_transaction(
                         is_writable: a.is_writable,
                     })
                     .collect(),
-                data: DepInst { amount }.data(),
+                data: DepInst {
+                    amount: payload_amount,
+                }
+                .data(),
             });
             policy_req.program_ids.push(klave_anchor::ID.to_string());
             policy_req.program_ids.push(SYSTEM_PROGRAM_ID.to_string());
         }
         InstructionType::WithdrawFromVault => {
-            let amount = payload.amount.unwrap_or(0);
             let accounts = Withdraw {
                 vault: to_anchor(vault_pda),
                 agent: to_anchor(agent_pubkey),
@@ -208,15 +213,27 @@ pub async fn execute_transaction(
                         is_writable: a.is_writable,
                     })
                     .collect(),
-                data: WdInst { amount }.data(),
+                data: WdInst {
+                    amount: payload_amount,
+                }
+                .data(),
             });
             policy_req.program_ids.push(klave_anchor::ID.to_string());
         }
         _ => {}
     }
 
-    // TODO: fetch real daily spend from audit store
-    let daily_spend_usd = 0.0;
+    let daily_spend_usd = match state.audit_store.sum_daily_spend(&agent.id).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to fetch daily spend");
+            return ApiResponse::<()>::error(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to assess daily spend limit".to_string(),
+            )
+            .into_response();
+        }
+    };
 
     if let Err(violations) = PolicyEngine::evaluate(&policy, &policy_req, daily_spend_usd) {
         return ApiResponse::<()>::error(
@@ -282,12 +299,32 @@ pub async fn execute_transaction(
         }
     };
 
+    // Write audit log entry
+    let metadata = match &policy_req.instruction_type {
+        InstructionType::SolTransfer
+        | InstructionType::WithdrawFromVault
+        | InstructionType::DepositToVault
+        | InstructionType::AgentWithdrawal => {
+            Some(serde_json::json!({ "lamports": payload_amount }))
+        }
+        _ => None,
+    };
+
+    let entry = NewAuditEntry {
+        agent_id: agent.id.clone(),
+        instruction_type: policy_req.instruction_type.to_string(),
+        status: "confirmed".to_string(),
+        tx_signature: Some(tx_sig.to_string()),
+        policy_violations: None,
+        metadata,
+    };
+    let _ = state.audit_store.append(&entry).await;
+
     ApiResponse::success(
-        serde_json::to_value(GatewayResponse {
+        GatewayResponse {
             signature: tx_sig.to_string(),
             via_kora,
-        })
-        .unwrap(),
+        },
         "transaction sent",
     )
     .into_response()
