@@ -171,6 +171,7 @@ pub async fn execute_transaction(
             policy_req.program_ids.push(klave_anchor::ID.to_string());
             policy_req.program_ids.push(SYSTEM_PROGRAM_ID.to_string());
         }
+
         InstructionType::DepositToVault => {
             let accounts = Deposit {
                 vault: to_anchor(vault_pda),
@@ -196,6 +197,7 @@ pub async fn execute_transaction(
             policy_req.program_ids.push(klave_anchor::ID.to_string());
             policy_req.program_ids.push(SYSTEM_PROGRAM_ID.to_string());
         }
+
         InstructionType::WithdrawFromVault => {
             let accounts = Withdraw {
                 vault: to_anchor(vault_pda),
@@ -220,6 +222,7 @@ pub async fn execute_transaction(
             });
             policy_req.program_ids.push(klave_anchor::ID.to_string());
         }
+
         _ => {}
     }
 
@@ -265,8 +268,17 @@ pub async fn execute_transaction(
         }
     };
 
-    let mut message = Message::new(&instructions, Some(&agent_pubkey));
+    let kora_pubkey = match Pubkey::from_str(&state.config.kora_pubkey) {
+        Ok(pk) => pk,
+        Err(_) => agent_pubkey, // Fallback to agent if Kora pubkey is bad
+    };
+
+    let mut message = Message::new(&instructions, Some(&kora_pubkey));
     message.recent_blockhash = recent_blockhash;
+
+    // We must build a legacy transaction to properly allocate signature slots
+    // for both the fee payer (Kora) and the agent.
+    let mut legacy_tx = solana_sdk::transaction::Transaction::new_unsigned(message.clone());
 
     let message_data = message.serialize();
     let keychain_signature = match signer.sign_message(&message_data).await {
@@ -283,10 +295,26 @@ pub async fn execute_transaction(
     let signature =
         solana_sdk::signature::Signature::try_from(keychain_signature.as_ref()).unwrap();
 
-    let versioned_tx = VersionedTransaction {
-        signatures: vec![signature],
-        message: solana_sdk::message::VersionedMessage::Legacy(message),
-    };
+    // Find the agent's position in the signature array and insert the signature.
+    // The fee payer (Kora) is always at index 0. If the agent is also a required signer,
+    // they will be at index 1 (or 0 if they are paying their own fee).
+    let mut signers_found = false;
+    for (i, pk) in message.account_keys.iter().enumerate() {
+        if pk == &agent_pubkey && message.is_signer(i) {
+            legacy_tx.signatures[i] = signature;
+            signers_found = true;
+        }
+    }
+
+    if !signers_found {
+        return ApiResponse::<()>::error(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Agent pubkey not found in transaction signers".to_string(),
+        )
+        .into_response();
+    }
+
+    let versioned_tx = VersionedTransaction::from(legacy_tx);
 
     let (tx_sig, via_kora) = match state.kora_gateway.send_transaction(&versioned_tx).await {
         Ok(res) => res,

@@ -37,6 +37,7 @@ async fn main() -> anyhow::Result<()> {
     let agent_signer = Arc::new(AgentSigner::new(agent_repo.clone()));
     let kora_gateway = Arc::new(KoraGateway::new(
         config.kora_rpc_url.clone(),
+        config.kora_api_key.clone(),
         config.solana_rpc_url.clone(),
     ));
 

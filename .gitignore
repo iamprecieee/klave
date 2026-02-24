@@ -4,3 +4,7 @@
 .env
 *.db
 test_*.py
+*.log
+*keypair*
+kora.toml
+signers.toml

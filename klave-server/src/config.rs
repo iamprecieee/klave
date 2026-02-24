@@ -5,6 +5,7 @@ pub struct Config {
     pub api_key: String,
     pub solana_rpc_url: String,
     pub kora_rpc_url: String,
+    pub kora_api_key: Option<String>,
     pub kora_pubkey: String,
     pub jupiter_api_url: String,
     pub jupiter_api_key: Option<String>,
@@ -24,6 +25,7 @@ impl Config {
                 .unwrap_or_else(|_| "http://localhost:8899".to_string()),
             kora_rpc_url: std::env::var("KORA_RPC_URL")
                 .unwrap_or_else(|_| "http://localhost:8080".to_string()),
+            kora_api_key: std::env::var("KORA_API_KEY").ok(),
             kora_pubkey: std::env::var("KORA_PUBKEY")
                 .unwrap_or_else(|_| "KoraGateway11111111111111111111111111111111".to_string()),
             jupiter_api_url: std::env::var("JUPITER_API_URL")
