@@ -1,6 +1,5 @@
 /target
 *.lock
-*.md
 .env
 *.db
 test_*.py
@@ -8,3 +7,7 @@ test_*.py
 *keypair*
 kora.toml
 signers.toml
+__pycache__/
+.pytest_cache/
+test-ledger/
+scripts/

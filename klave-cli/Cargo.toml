@@ -1,0 +1,18 @@
+[package]
+name = "klave-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "klave"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+tokio = { workspace = true }
+rand = "0.10.0"
+dotenvy = "0.15.7"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+solana-sdk = { workspace = true }

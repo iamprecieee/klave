@@ -2,15 +2,20 @@ use solana_sdk::signature::{Keypair, Signer};
 use sqlx::SqlitePool;
 
 use crate::agent::model::{Agent, AgentPolicy, AgentPolicyInput, CreateAgentRequest};
+use crate::crypto;
 use crate::error::KlaveError;
 
 pub struct AgentRepository {
     pool: SqlitePool,
+    encryption_key: [u8; 32],
 }
 
 impl AgentRepository {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(pool: SqlitePool, encryption_key: [u8; 32]) -> Self {
+        Self {
+            pool,
+            encryption_key,
+        }
     }
 
     pub async fn create(&self, req: &CreateAgentRequest) -> Result<Agent, KlaveError> {
@@ -20,7 +25,7 @@ impl AgentRepository {
 
         let keypair = Keypair::new();
         let pubkey = keypair.pubkey().to_string();
-        let encrypted_keypair = keypair.to_bytes().to_vec();
+        let encrypted_keypair = crypto::encrypt(&keypair.to_bytes(), &self.encryption_key)?;
 
         let allowed_programs_json = serde_json::to_string(&req.policy.allowed_programs)?;
         let token_allowlist_json = serde_json::to_string(&req.policy.token_allowlist)?;
@@ -168,7 +173,7 @@ impl AgentRepository {
                 .await?;
 
         match row {
-            Some((bytes,)) => Ok(bytes),
+            Some((blob,)) => crypto::decrypt(&blob, &self.encryption_key),
             None => Err(KlaveError::AgentNotFound(id.to_string())),
         }
     }

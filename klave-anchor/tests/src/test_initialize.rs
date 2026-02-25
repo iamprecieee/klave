@@ -1,20 +1,24 @@
 use anchor_client::{
     solana_sdk::{
-        commitment_config::CommitmentConfig, pubkey::Pubkey, signature::read_keypair_file,
-        signature::Keypair, signer::Signer, system_instruction,
+        self, commitment_config::CommitmentConfig, pubkey::Pubkey, signature::read_keypair_file,
+        signature::Keypair, signer::Signer,
     },
     Client, Cluster,
 };
-use klave_anchor::accounts::{Deposit, InitializeVault, Withdraw};
+use klave_anchor::accounts::{InitializeVault, VaultOperation};
 use klave_anchor::instruction::{
-    Deposit as DepInst, InitializeVault as InitInst, Withdraw as WdInst,
+    Deposit as DepositInstruction, InitializeVault as InitializeVaultInstruction,
+    Withdraw as WithdrawInstruction,
 };
 use std::str::FromStr;
 
 #[test]
 fn test_treasury_flow() {
     let program_id = "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx";
-    let anchor_wallet = std::env::var("ANCHOR_WALLET").unwrap();
+    let anchor_wallet = std::env::var("ANCHOR_WALLET").unwrap_or_else(|_| {
+        let home = std::env::var("HOME").expect("HOME not set");
+        format!("{home}/.config/solana/id.json")
+    });
     let payer = read_keypair_file(&anchor_wallet).unwrap();
 
     let client = Client::new_with_options(Cluster::Localnet, &payer, CommitmentConfig::confirmed());
@@ -26,7 +30,7 @@ fn test_treasury_flow() {
     // Airdrop some SOL to the agent so it can deposit
     let tx = program
         .request()
-        .instruction(system_instruction::transfer(
+        .instruction(solana_sdk::system_instruction::transfer(
             &payer.pubkey(),
             &agent.pubkey(),
             10_000_000_000,
@@ -47,7 +51,7 @@ fn test_treasury_flow() {
             payer: payer.pubkey(),
             system_program: anchor_client::solana_sdk::system_program::ID,
         })
-        .args(InitInst {})
+        .args(InitializeVaultInstruction {})
         .send()
         .expect("Initialize should succeed");
 
@@ -56,12 +60,12 @@ fn test_treasury_flow() {
     // Deposit
     let tx = program
         .request()
-        .accounts(Deposit {
+        .accounts(VaultOperation {
             vault: vault_pda,
             agent: agent.pubkey(),
             system_program: anchor_client::solana_sdk::system_program::ID,
         })
-        .args(DepInst { amount: 1_000_000 })
+        .args(DepositInstruction { amount: 1_000_000 })
         .signer(&agent)
         .send()
         .expect("Deposit should succeed");
@@ -71,12 +75,12 @@ fn test_treasury_flow() {
     // Withdraw
     let tx = program
         .request()
-        .accounts(Withdraw {
+        .accounts(VaultOperation {
             vault: vault_pda,
             agent: agent.pubkey(),
             system_program: anchor_client::solana_sdk::system_program::ID,
         })
-        .args(WdInst { amount: 500_000 })
+        .args(WithdrawInstruction { amount: 500_000 })
         .signer(&agent)
         .send()
         .expect("Withdraw should succeed");

@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en" class="crt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KLAVE — Agent Wallet Monitor</title>
+    <meta
+      name="description"
+      content="Real-time monitoring dashboard for KLAVE agentic wallets on Solana devnet."
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --color-primary: rgb(169, 56, 56);
+        --color-secondary: rgb(236, 236, 222);
+        --color-background: rgb(236, 236, 222);
+        --color-text: rgb(169, 56, 56);
+        --color-success: #16a085;
+        --color-warning: #d97706;
+        --color-neutral: #666;
+        --color-accent: #3b82f6;
+        --spacing-xs: 8px;
+        --spacing-sm: 12px;
+        --spacing-md: 16px;
+        --spacing-lg: 24px;
+        --spacing-xl: 32px;
+        --shadow-card: 0 4px 7px rgba(40, 40, 40, 1);
+        --shadow-hover: 0 6px 12px rgba(40, 40, 40, 1);
+        --border-radius: 10px;
+        --border-width: 3px;
+      }
+
+      html {
+        font-size: 14px;
+      }
+      body {
+        font-family: "Courier New", monospace;
+        background-color: var(--color-background);
+        color: var(--color-text);
+        line-height: 1.6;
+        min-height: 100vh;
+        position: relative;
+      }
+
+      /* CRT scanline overlay */
+      .crt::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background:
+          linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+          linear-gradient(
+            90deg,
+            rgba(255, 0, 0, 0.06),
+            rgba(0, 255, 0, 0.02),
+            rgba(0, 0, 255, 0.06)
+          );
+        background-size:
+          100% 2px,
+          3px 100%;
+        pointer-events: none;
+        z-index: 9999;
+      }
+
+      /* CRT flicker */
+      .crt::after {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(18, 16, 16, 0.1);
+        opacity: 0;
+        pointer-events: none;
+        z-index: 9999;
+        animation: flicker 0.15s infinite;
+      }
+
+      @keyframes flicker {
+        0% {
+          opacity: 0.028;
+        }
+        10% {
+          opacity: 0.042;
+        }
+        20% {
+          opacity: 0.015;
+        }
+        30% {
+          opacity: 0.008;
+        }
+        40% {
+          opacity: 0.019;
+        }
+        50% {
+          opacity: 0.032;
+        }
+        60% {
+          opacity: 0.016;
+        }
+        70% {
+          opacity: 0.038;
+        }
+        80% {
+          opacity: 0.019;
+        }
+        90% {
+          opacity: 0.032;
+        }
+        100% {
+          opacity: 0.016;
+        }
+      }
+
+      /* Grid background */
+      .grid-bg {
+        background-image:
+          linear-gradient(rgba(169, 56, 56, 0.1) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(169, 56, 56, 0.1) 1px, transparent 1px);
+        background-size: 50px 50px;
+        background-position: center;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        font-weight: bold;
+        text-transform: uppercase;
+        color: var(--color-primary);
+        letter-spacing: 2px;
+      }
+
+      /* Header */
+      .header {
+        height: 60px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 2rem;
+        border-bottom: var(--border-width) solid var(--color-primary);
+        box-shadow: var(--shadow-card);
+        background: var(--color-background);
+      }
+      .header h1 {
+        font-size: 1.6rem;
+      }
+      .header .status-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 0.5rem;
+        animation: pulse 2s infinite;
+      }
+      .header .status-dot.live {
+        background: var(--color-success);
+      }
+      .header .status-dot.dead {
+        background: var(--color-primary);
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.7;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      .header .meta {
+        font-size: 0.75rem;
+        color: var(--color-neutral);
+      }
+
+      /* Layout */
+      .container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto 1fr;
+        gap: var(--spacing-lg);
+        padding: var(--spacing-lg);
+        min-height: calc(100vh - 60px);
+      }
+
+      /* Panels */
+      .panel {
+        border: var(--border-width) solid var(--color-primary);
+        border-radius: var(--border-radius);
+        box-shadow: var(--shadow-card);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        background: var(--color-background);
+        transition:
+          transform 0.2s ease,
+          box-shadow 0.2s ease;
+      }
+      .panel-header {
+        background: var(--color-primary);
+        color: var(--color-secondary);
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 0.8rem;
+        font-weight: bold;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .panel-header .count {
+        background: var(--color-secondary);
+        color: var(--color-primary);
+        padding: 2px 8px;
+        font-size: 0.7rem;
+        border-radius: 5px;
+        font-weight: bold;
+      }
+      .panel-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0;
+      }
+
+      /* Agent cards */
+      .agent-card {
+        padding: var(--spacing-md) var(--spacing-lg);
+        border-bottom: 1px solid rgba(169, 56, 56, 0.2);
+        transition: background 0.15s;
+      }
+      .agent-card:hover {
+        background: rgba(169, 56, 56, 0.05);
+      }
+      .agent-card:last-child {
+        border-bottom: none;
+      }
+      .agent-card .label {
+        font-weight: bold;
+        font-size: 0.95rem;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      .agent-card .pubkey {
+        font-size: 0.7rem;
+        color: var(--color-neutral);
+        margin-bottom: var(--spacing-xs);
+        word-break: break-all;
+      }
+      .agent-card .stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--spacing-xs);
+        font-size: 0.75rem;
+      }
+      .agent-card .stat-label {
+        color: var(--color-neutral);
+        text-transform: uppercase;
+        font-size: 0.6rem;
+        letter-spacing: 1px;
+      }
+      .agent-card .stat-value {
+        font-weight: bold;
+      }
+
+      /* Badges */
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        font-size: 0.6rem;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        border: 2px solid;
+        border-radius: 5px;
+      }
+      .badge.active {
+        color: var(--color-success);
+        border-color: var(--color-success);
+      }
+      .badge.inactive {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+      }
+      .badge.confirmed {
+        color: var(--color-success);
+        border-color: var(--color-success);
+      }
+      .badge.failed {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+      }
+      .badge.policy_violated {
+        color: var(--color-warning);
+        border-color: var(--color-warning);
+      }
+
+      /* Transaction feed */
+      .tx-list {
+        list-style: none;
+      }
+      .tx-item {
+        padding: var(--spacing-sm) var(--spacing-md);
+        border-bottom: 1px solid rgba(169, 56, 56, 0.15);
+        font-size: 0.75rem;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: var(--spacing-sm);
+        align-items: center;
+        transition: background 0.15s;
+      }
+      .tx-item:hover {
+        background: rgba(169, 56, 56, 0.05);
+      }
+      .tx-item:last-child {
+        border-bottom: none;
+      }
+      .tx-item .tx-type {
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 0.6rem;
+        letter-spacing: 1px;
+        background: var(--color-primary);
+        color: var(--color-secondary);
+        padding: 2px 8px;
+        border-radius: 5px;
+        white-space: nowrap;
+      }
+      .tx-item .tx-agent {
+        color: var(--color-neutral);
+        font-size: 0.65rem;
+      }
+      .tx-item .tx-sig {
+        font-size: 0.6rem;
+        color: var(--color-neutral);
+      }
+      .tx-item .tx-sig a {
+        color: var(--color-primary);
+        text-decoration: none;
+        border-bottom: 1px dashed var(--color-primary);
+        transition: opacity 0.2s;
+      }
+      .tx-item .tx-sig a:hover {
+        opacity: 0.6;
+      }
+      .tx-item .tx-time {
+        font-size: 0.6rem;
+        color: var(--color-neutral);
+        text-align: right;
+      }
+
+      /* Empty state */
+      .empty {
+        padding: var(--spacing-xl) var(--spacing-md);
+        text-align: center;
+        color: var(--color-neutral);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+      }
+
+      /* Full-width bottom panel */
+      .panel.full-width {
+        grid-column: 1/-1;
+      }
+
+      /* Footer */
+      .footer {
+        height: 30px;
+        border-top: 1px solid var(--color-primary);
+        padding: 0 1rem;
+        font-size: 0.7rem;
+        color: var(--color-secondary);
+        background: var(--color-primary);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      /* Responsive */
+      @media (max-width: 768px) {
+        .container {
+          grid-template-columns: 1fr;
+          padding: var(--spacing-sm);
+        }
+      }
+
+      /* Scrollbar */
+      .panel-body::-webkit-scrollbar {
+        width: 6px;
+      }
+      .panel-body::-webkit-scrollbar-track {
+        background: var(--color-secondary);
+      }
+      .panel-body::-webkit-scrollbar-thumb {
+        background: var(--color-primary);
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body class="grid-bg">
+    <header class="header">
+      <h1>Klave</h1>
+      <div>
+        <span class="status-dot live" id="statusDot"></span>
+        <span class="meta" id="statusText">connecting...</span>
+      </div>
+    </header>
+
+    <div class="container">
+      <!-- Agent Grid -->
+      <div class="panel">
+        <div class="panel-header">
+          <span>Agents</span>
+          <span class="count" id="agentCount">0</span>
+        </div>
+        <div class="panel-body" id="agentGrid">
+          <div class="empty">No agents registered</div>
+        </div>
+      </div>
+
+      <!-- Transaction Feed -->
+      <div class="panel">
+        <div class="panel-header">
+          <span>Transaction Feed</span>
+          <span class="count" id="txCount">0</span>
+        </div>
+        <div class="panel-body">
+          <ul class="tx-list" id="txFeed">
+            <li class="empty">Awaiting transactions</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Swap Activity -->
+      <div class="panel full-width">
+        <div class="panel-header">
+          <span>Swap &amp; DeFi Activity</span>
+          <span class="count" id="swapCount">0</span>
+        </div>
+        <div class="panel-body">
+          <ul class="tx-list" id="swapFeed">
+            <li class="empty">No swap activity</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <span>KLAVE Agent Monitor</span>
+      <span>Solana Devnet</span>
+    </footer>
+
+    <script>
+      const CONFIG = {
+        baseUrl:
+          window.location.hostname === "localhost"
+            ? "http://localhost:3000"
+            : window.location.origin,
+        pollInterval: 3000,
+        explorerBase: "https://explorer.solana.com/tx/",
+        explorerSuffix: "?cluster=devnet",
+      };
+
+      function truncate(s, n = 8) {
+        if (!s || s.length <= n * 2) return s || "";
+        return s.slice(0, n) + "..." + s.slice(-n);
+      }
+
+      function lamportsToSol(lamports) {
+        return (lamports / 1_000_000_000).toFixed(4);
+      }
+
+      function formatTime(ts) {
+        if (!ts) return "";
+        const d = new Date(
+          typeof ts === "number" && ts < 1e12 ? ts * 1000 : ts,
+        );
+        return d.toLocaleTimeString("en-GB", { hour12: false });
+      }
+
+      function statusBadge(status) {
+        const cls =
+          status === "confirmed"
+            ? "confirmed"
+            : status === "policy_violated"
+              ? "policy_violated"
+              : "failed";
+        return `<span class="badge ${cls}">${status}</span>`;
+      }
+
+      function isSwapEntry(entry) {
+        const t = (entry.instruction_type || "").toLowerCase();
+        return (
+          t.includes("swap") || t.includes("liquidity") || t.includes("orca")
+        );
+      }
+
+      // ── Rendering ───────────────────────────────────────────────────
+
+      function renderAgents(agents) {
+        const el = document.getElementById("agentGrid");
+        document.getElementById("agentCount").textContent = agents.length;
+
+        if (!agents.length) {
+          el.innerHTML = '<div class="empty">No agents registered</div>';
+          return;
+        }
+
+        el.innerHTML = agents
+          .map(
+            (a) => `
+    <div class="agent-card" data-id="${a.id}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="label">${a.label || "unnamed"}</div>
+        <span class="badge ${a.is_active ? "active" : "inactive"}">
+          ${a.is_active ? "online" : "offline"}
+        </span>
+      </div>
+      <div class="pubkey">${a.pubkey}</div>
+      <div class="stats">
+        <div>
+          <div class="stat-label">SOL Balance</div>
+          <div class="stat-value" id="bal-${a.id}">—</div>
+        </div>
+        <div>
+          <div class="stat-label">Vault</div>
+          <div class="stat-value" id="vault-${a.id}">—</div>
+        </div>
+      </div>
+    </div>
+  `,
+          )
+          .join("");
+      }
+
+      function renderTxFeed(entries) {
+        const el = document.getElementById("txFeed");
+        document.getElementById("txCount").textContent = entries.length;
+
+        if (!entries.length) {
+          el.innerHTML = '<li class="empty">Awaiting transactions</li>';
+          return;
+        }
+
+        el.innerHTML = entries
+          .slice(0, 100)
+          .map((e) => {
+            const sigLink = e.tx_signature
+              ? `<a href="${CONFIG.explorerBase}${e.tx_signature}${CONFIG.explorerSuffix}" target="_blank" rel="noopener">${truncate(e.tx_signature, 6)}</a>`
+              : "—";
+
+            return `
+      <li class="tx-item">
+        <span class="tx-type">${e.instruction_type || "unknown"}</span>
+        <span>
+          <span class="tx-agent">${truncate(e.agent_id, 4)}</span>
+          ${statusBadge(e.status)}
+          <span class="tx-sig">${sigLink}</span>
+        </span>
+        <span class="tx-time">${formatTime(e.timestamp)}</span>
+      </li>`;
+          })
+          .join("");
+      }
+
+      function renderSwapFeed(entries) {
+        const swaps = entries.filter(isSwapEntry);
+        const el = document.getElementById("swapFeed");
+        document.getElementById("swapCount").textContent = swaps.length;
+
+        if (!swaps.length) {
+          el.innerHTML = '<li class="empty">No swap activity</li>';
+          return;
+        }
+
+        el.innerHTML = swaps
+          .slice(0, 50)
+          .map((e) => {
+            const sigLink = e.tx_signature
+              ? `<a href="${CONFIG.explorerBase}${e.tx_signature}${CONFIG.explorerSuffix}" target="_blank" rel="noopener">${truncate(e.tx_signature, 6)}</a>`
+              : "";
+
+            return `
+      <li class="tx-item">
+        <span class="tx-type">${e.instruction_type}</span>
+        <span>
+          <span class="tx-agent">${truncate(e.agent_id, 4)}</span>
+          ${statusBadge(e.status)}
+          <span class="tx-sig">${sigLink}</span>
+        </span>
+        <span class="tx-time">${formatTime(e.timestamp)}</span>
+      </li>`;
+          })
+          .join("");
+      }
+
+      // ── Data fetching ───────────────────────────────────────────────
+
+      async function fetchJson(path) {
+        const resp = await fetch(`${CONFIG.baseUrl}${path}`);
+        if (!resp.ok) throw new Error(`${resp.status}`);
+        const body = await resp.json();
+        return body.data;
+      }
+
+      async function poll() {
+        const dot = document.getElementById("statusDot");
+        const txt = document.getElementById("statusText");
+
+        try {
+          const agents = await fetchJson("/api/v1/agents");
+          renderAgents(agents);
+
+          const allEntries = [];
+
+          for (const agent of agents) {
+            try {
+              const balance = await fetchJson(
+                `/api/v1/agents/${agent.id}/balance`,
+              );
+              const balEl = document.getElementById(`bal-${agent.id}`);
+              const vaultEl = document.getElementById(`vault-${agent.id}`);
+              if (balEl)
+                balEl.textContent = `${lamportsToSol(balance.sol_lamports)} SOL`;
+              if (vaultEl)
+                vaultEl.textContent = `${lamportsToSol(balance.vault_lamports)} SOL`;
+            } catch {
+              /* balance endpoint may fail for unfunded agents */
+            }
+
+            try {
+              const history = await fetchJson(
+                `/api/v1/agents/${agent.id}/history`,
+              );
+              allEntries.push(...history);
+            } catch {
+              /* ignore */
+            }
+          }
+
+          allEntries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          renderTxFeed(allEntries);
+          renderSwapFeed(allEntries);
+
+          dot.className = "status-dot live";
+          txt.textContent = `polling · ${agents.length} agent${agents.length !== 1 ? "s" : ""} · ${new Date().toLocaleTimeString("en-GB", { hour12: false })}`;
+        } catch (err) {
+          dot.className = "status-dot dead";
+          txt.textContent = `offline — ${err.message}`;
+        }
+      }
+
+      // ── Init ────────────────────────────────────────────────────────
+
+      poll();
+      setInterval(poll, CONFIG.pollInterval);
+    </script>
+  </body>
+</html>

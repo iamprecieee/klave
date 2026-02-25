@@ -4,7 +4,7 @@ use klave_core::agent::repository::AgentRepository;
 use klave_core::agent::signer::AgentSigner;
 use klave_core::audit::store::AuditStore;
 use klave_core::solana::gateway::KoraGateway;
-use klave_core::solana::jupiter::JupiterClient;
+use klave_core::solana::orca::OrcaClient;
 
 use crate::config::Config;
 
@@ -15,5 +15,5 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub agent_signer: Arc<AgentSigner>,
     pub kora_gateway: Arc<KoraGateway>,
-    pub jupiter_client: Arc<JupiterClient>,
+    pub orca_client: Arc<OrcaClient>,
 }

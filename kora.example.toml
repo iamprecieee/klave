@@ -2,7 +2,7 @@
 rate_limit = 100
 
 [kora.auth]
-api_key = "your-super-secret-api-key"
+# Managed by `klave start` — reads KORA_API_KEY from .env
 
 [kora.cache]
 enabled = false
@@ -23,6 +23,7 @@ allowed_programs = [
     "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", # Associated Token
     "AddressLookupTab1e1111111111111111111111111",  # Address Lookup Table
     "ComputeBudget111111111111111111111111111111",  # Compute Budget
+    "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",  # Memo
     "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",  # Orca Whirlpool
     "9W959DqEETiGZocYWCQPaS2U113wGZpT2NMC9Esh1xM6", # Orca Token Swap
 ]
@@ -39,7 +40,7 @@ allowed_spl_paid_tokens = [
 disallowed_accounts = []
 
 [validation.price]
-type = "margin"
+type = "free"
 
 [validation.fee_payer_policy.system]
 allow_transfer = false
@@ -81,6 +82,6 @@ allow_initialize_multisig = false
 allow_freeze_account = false
 allow_thaw_account = false
 
-[validation.token2022]
+[validation.token_2022]
 blocked_mint_extensions = ["transfer_hook", "pausable", "permanent_delegate"]
 blocked_account_extensions = ["cpi_guard", "memo_transfer"]

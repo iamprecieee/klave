@@ -1,5 +1,5 @@
 [workspace]
-members = ["klave-core", "klave-server"]
+members = ["klave-core", "klave-server", "klave-cli"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -11,3 +11,4 @@ tracing = "0.1.44"
 uuid = { version = "1.16.0", features = ["v4", "serde"] }
 chrono = { version = "0.4.41", features = ["serde"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
+solana-sdk = "4.0.1"

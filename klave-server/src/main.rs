@@ -11,7 +11,7 @@ use klave_core::agent::repository::AgentRepository;
 use klave_core::agent::signer::AgentSigner;
 use klave_core::audit::store::AuditStore;
 use klave_core::solana::gateway::KoraGateway;
-use klave_core::solana::jupiter::JupiterClient;
+use klave_core::solana::orca::OrcaClient;
 use tracing::info;
 
 #[tokio::main]
@@ -31,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
     let pool = klave_core::db::init_pool(&config.database_url).await?;
     info!("database initialized");
 
-    let agent_repo = Arc::new(AgentRepository::new(pool.clone()));
+    let agent_repo = Arc::new(AgentRepository::new(pool.clone(), config.encryption_key));
     let audit_store = Arc::new(AuditStore::new(pool));
 
     let agent_signer = Arc::new(AgentSigner::new(agent_repo.clone()));
@@ -41,10 +41,10 @@ async fn main() -> anyhow::Result<()> {
         config.solana_rpc_url.clone(),
     ));
 
-    let jupiter_client = Arc::new(JupiterClient::new(
-        config.jupiter_api_url.clone(),
-        config.jupiter_api_key.clone(),
+    let rpc_client = Arc::new(solana_client::nonblocking::rpc_client::RpcClient::new(
+        config.solana_rpc_url.clone(),
     ));
+    let orca_client = Arc::new(OrcaClient::new(rpc_client));
 
     let state = state::AppState {
         agent_repo,
@@ -52,10 +52,11 @@ async fn main() -> anyhow::Result<()> {
         config: Arc::new(config.clone()),
         agent_signer,
         kora_gateway,
-        jupiter_client,
+        orca_client,
     };
 
-    let app = router::build_router(state);
+    let cors = tower_http::cors::CorsLayer::permissive();
+    let app = router::build_router(state).layer(cors);
 
     let addr = format!("0.0.0.0:{}", config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;

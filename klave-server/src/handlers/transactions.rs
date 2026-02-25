@@ -4,7 +4,7 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
 };
-use klave_anchor::accounts::{Deposit, InitializeVault, Withdraw};
+use klave_anchor::accounts::{InitializeVault, VaultOperation};
 use klave_anchor::instruction::{
     Deposit as DepInst, InitializeVault as InitInst, Withdraw as WdInst,
 };
@@ -173,7 +173,7 @@ pub async fn execute_transaction(
         }
 
         InstructionType::DepositToVault => {
-            let accounts = Deposit {
+            let accounts = VaultOperation {
                 vault: to_anchor(vault_pda),
                 agent: to_anchor(agent_pubkey),
                 system_program: to_anchor(SYSTEM_PROGRAM_ID),
@@ -199,7 +199,7 @@ pub async fn execute_transaction(
         }
 
         InstructionType::WithdrawFromVault => {
-            let accounts = Withdraw {
+            let accounts = VaultOperation {
                 vault: to_anchor(vault_pda),
                 agent: to_anchor(agent_pubkey),
                 system_program: to_anchor(SYSTEM_PROGRAM_ID),

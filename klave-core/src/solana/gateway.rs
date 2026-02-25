@@ -80,8 +80,9 @@ impl KoraGateway {
                         .and_then(|s| s.as_str())
                     {
                         if let Ok(bytes) = general_purpose::STANDARD.decode(signed_b64) {
-                            if let Ok(fully_signed_tx) =
-                                bincode::deserialize::<VersionedTransaction>(&bytes)
+                            if let Ok(fully_signed_tx) = bincode::deserialize::<
+                                solana_transaction_client::versioned::VersionedTransaction,
+                            >(&bytes)
                             {
                                 match self
                                     .rpc_client
@@ -137,9 +138,11 @@ impl KoraGateway {
         }
 
         // Fallback or if Kora URL is empty
+        let client_tx: solana_transaction_client::versioned::VersionedTransaction =
+            bincode::deserialize(&bincode_tx).map_err(|e| KlaveError::Internal(e.to_string()))?;
         let sig = self
             .rpc_client
-            .send_transaction(tx)
+            .send_transaction(&client_tx)
             .await
             .map_err(|e| KlaveError::Internal(format!("Fallback RPC Error: {}", e)))?;
 
