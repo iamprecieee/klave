@@ -9,7 +9,6 @@ pub enum PolicyViolation {
     ProgramNotAllowed(String),
     ExceedsMaxLamports { requested: i64, limit: i64 },
     TokenNotAllowed(String),
-    PoolTokenNotAllowed(String),
     DailySpendExceeded { current_usd: f64, limit_usd: f64 },
     DailySwapVolumeExceeded { current_usd: f64, limit_usd: f64 },
     SlippageExceeded { requested_bps: i32, limit_bps: i32 },
@@ -25,7 +24,6 @@ impl fmt::Display for PolicyViolation {
                 write!(f, "requested {requested} lamports exceeds limit of {limit}")
             }
             Self::TokenNotAllowed(m) => write!(f, "token not in allowlist: {m}"),
-            Self::PoolTokenNotAllowed(m) => write!(f, "pool token not in allowlist: {m}"),
             Self::DailySpendExceeded {
                 current_usd,
                 limit_usd,
@@ -62,7 +60,6 @@ pub enum InstructionType {
     WithdrawFromVault,
     TokenSwap,
     AgentWithdrawal,
-    OrcaLiquidityProvision,
 }
 
 impl fmt::Display for InstructionType {
@@ -74,7 +71,6 @@ impl fmt::Display for InstructionType {
             Self::WithdrawFromVault => write!(f, "withdraw_from_vault"),
             Self::TokenSwap => write!(f, "token_swap"),
             Self::AgentWithdrawal => write!(f, "agent_withdrawal"),
-            Self::OrcaLiquidityProvision => write!(f, "orca_liquidity_provision"),
         }
     }
 }
@@ -93,12 +89,6 @@ pub struct TransactionRequest {
 pub struct PolicyEngine;
 
 impl PolicyEngine {
-    /// Evaluates the transaction request against the agent's policy.
-    /// Returns `Ok(())` if the request passes all checks, or `Err(violations)`
-    /// with every failing check collected.
-    ///
-    /// `daily_spend_usd` is the running total for today, queried from the audit
-    /// store by the caller before invoking this method.
     pub fn evaluate(
         policy: &AgentPolicy,
         request: &TransactionRequest,
@@ -106,19 +96,15 @@ impl PolicyEngine {
     ) -> Result<(), Vec<PolicyViolation>> {
         let mut violations = Vec::new();
 
-        // 1. Agent must be active
         if !request.is_active {
             violations.push(PolicyViolation::AgentInactive);
         }
-
-        // 2. All program IDs must be in the allowed list (empty list = deny all)
         for pid in &request.program_ids {
             if !policy.allowed_programs.contains(pid) {
                 violations.push(PolicyViolation::ProgramNotAllowed(pid.clone()));
             }
         }
 
-        // 3. Lamport cost within limit
         if let Some(lamports) = request.lamports
             && lamports > policy.max_lamports_per_tx
         {
@@ -128,14 +114,12 @@ impl PolicyEngine {
             });
         }
 
-        // 4. Token mints must be in allowlist (empty list = deny all)
         for mint in &request.mints {
             if !policy.token_allowlist.contains(mint) {
                 violations.push(PolicyViolation::TokenNotAllowed(mint.clone()));
             }
         }
 
-        // 5. Daily spend limit (0 = unlimited)
         if policy.daily_spend_limit_usd > 0.0 && daily_spend_usd > policy.daily_spend_limit_usd {
             violations.push(PolicyViolation::DailySpendExceeded {
                 current_usd: daily_spend_usd,
@@ -143,7 +127,6 @@ impl PolicyEngine {
             });
         }
 
-        // 6. Slippage cap (swap-specific)
         if let Some(requested_bps) = request.slippage_bps
             && requested_bps > policy.slippage_bps
         {
@@ -153,7 +136,6 @@ impl PolicyEngine {
             });
         }
 
-        // 7. Withdrawal destination allowlist
         if let Some(ref dest) = request.destination
             && matches!(request.instruction_type, InstructionType::AgentWithdrawal)
             && (policy.withdrawal_destinations.is_empty()
@@ -216,32 +198,6 @@ impl PolicyEngine {
                     limit_usd: policy.daily_swap_volume_usd,
                 });
             }
-        }
-
-        if violations.is_empty() {
-            Ok(())
-        } else {
-            Err(violations)
-        }
-    }
-
-    pub fn check_pool_interaction(
-        policy: &AgentPolicy,
-        token_a_mint: &str,
-        token_b_mint: &str,
-    ) -> Result<(), Vec<PolicyViolation>> {
-        let mut violations = Vec::new();
-
-        if !policy.token_allowlist.contains(&token_a_mint.to_string()) {
-            violations.push(PolicyViolation::PoolTokenNotAllowed(
-                token_a_mint.to_string(),
-            ));
-        }
-
-        if !policy.token_allowlist.contains(&token_b_mint.to_string()) {
-            violations.push(PolicyViolation::PoolTokenNotAllowed(
-                token_b_mint.to_string(),
-            ));
         }
 
         if violations.is_empty() {
@@ -411,41 +367,5 @@ mod tests {
         let violations = PolicyEngine::evaluate(&policy, &req, 0.0).unwrap_err();
         assert!(violations.contains(&PolicyViolation::ProgramNotAllowed("any_prog".to_string())));
         assert!(violations.contains(&PolicyViolation::TokenNotAllowed("any_mint".to_string())));
-    }
-
-    #[test]
-    fn test_check_pool_interaction() {
-        let policy = test_policy();
-
-        // Pass: both tokens in allowlist
-        assert!(PolicyEngine::check_pool_interaction(&policy, "mint_a", "mint_b").is_ok());
-
-        // Fail: token_a not in allowlist
-        let result_a = PolicyEngine::check_pool_interaction(&policy, "unknown_mint", "mint_b");
-        assert!(result_a.is_err());
-        assert!(
-            result_a
-                .unwrap_err()
-                .contains(&PolicyViolation::PoolTokenNotAllowed(
-                    "unknown_mint".to_string()
-                ))
-        );
-
-        // Fail: token_b not in allowlist
-        let result_b = PolicyEngine::check_pool_interaction(&policy, "mint_a", "unknown_mint");
-        assert!(result_b.is_err());
-        assert!(
-            result_b
-                .unwrap_err()
-                .contains(&PolicyViolation::PoolTokenNotAllowed(
-                    "unknown_mint".to_string()
-                ))
-        );
-
-        // Fail: neither token in allowlist
-        let result_both = PolicyEngine::check_pool_interaction(&policy, "unknown1", "unknown2");
-        assert!(result_both.is_err());
-        let errs = result_both.unwrap_err();
-        assert_eq!(errs.len(), 2);
     }
 }

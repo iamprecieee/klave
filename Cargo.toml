@@ -3,12 +3,19 @@ members = ["klave-core", "klave-server", "klave-cli"]
 resolver = "2"
 
 [workspace.dependencies]
+dotenvy = "0.15.7"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+solana-client = "3"
+solana-keychain = "0.2.1"
 thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = ["full"] }
 tracing = "0.1.44"
 uuid = { version = "1.16.0", features = ["v4", "serde"] }
 chrono = { version = "0.4.41", features = ["serde"] }
+orca_whirlpools = "7.0.1"
+orca_whirlpools_core = "2.1.0"
+rand = "0.10.0"
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
 solana-sdk = "4.0.1"
+solana-system-interface = { version = "3", features = ["bincode"] }

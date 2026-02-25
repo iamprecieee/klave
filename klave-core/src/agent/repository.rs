@@ -1,5 +1,7 @@
+use chrono::Utc;
 use solana_sdk::signature::{Keypair, Signer};
 use sqlx::SqlitePool;
+use uuid::Uuid;
 
 use crate::agent::model::{Agent, AgentPolicy, AgentPolicyInput, CreateAgentRequest};
 use crate::crypto;
@@ -19,9 +21,9 @@ impl AgentRepository {
     }
 
     pub async fn create(&self, req: &CreateAgentRequest) -> Result<Agent, KlaveError> {
-        let agent_id = uuid::Uuid::new_v4().to_string();
-        let policy_id = uuid::Uuid::new_v4().to_string();
-        let now = chrono::Utc::now().timestamp();
+        let agent_id = Uuid::new_v4().to_string();
+        let policy_id = Uuid::new_v4().to_string();
+        let now = Utc::now().timestamp();
 
         let keypair = Keypair::new();
         let pubkey = keypair.pubkey().to_string();
@@ -132,7 +134,7 @@ impl AgentRepository {
         agent_id: &str,
         input: &AgentPolicyInput,
     ) -> Result<AgentPolicy, KlaveError> {
-        let now = chrono::Utc::now().timestamp();
+        let now = Utc::now().timestamp();
         let allowed_programs_json = serde_json::to_string(&input.allowed_programs)?;
         let token_allowlist_json = serde_json::to_string(&input.token_allowlist)?;
         let withdrawal_destinations_json = serde_json::to_string(&input.withdrawal_destinations)?;

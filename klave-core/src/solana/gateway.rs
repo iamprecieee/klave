@@ -1,10 +1,13 @@
+use std::sync::Arc;
+
 use base64::{Engine as _, engine::general_purpose};
 use reqwest::Client;
 use serde_json::json;
-use solana_client::nonblocking::rpc_client::RpcClient;
-use solana_sdk::signature::Signature;
-use solana_sdk::transaction::VersionedTransaction;
-use std::sync::Arc;
+use solana_client::{nonblocking::rpc_client::RpcClient, rpc_config::RpcSendTransactionConfig};
+use solana_sdk::{
+    hash::Hash, pubkey::Pubkey, signature::Signature, transaction::VersionedTransaction,
+};
+use solana_transaction_client::versioned::VersionedTransaction as ClientVersionedTransaction;
 
 use crate::error::KlaveError;
 
@@ -25,25 +28,26 @@ impl KoraGateway {
         }
     }
 
-    pub async fn get_latest_blockhash(&self) -> Result<solana_sdk::hash::Hash, KlaveError> {
+    pub async fn get_latest_blockhash(&self) -> Result<Hash, KlaveError> {
         self.rpc_client
             .get_latest_blockhash()
             .await
             .map_err(|e| KlaveError::Internal(e.to_string()))
     }
 
+    pub async fn get_balance(&self, pubkey: &Pubkey) -> u64 {
+        self.rpc_client.get_balance(pubkey).await.unwrap_or(0)
+    }
+
     pub async fn get_balances(
         &self,
-        agent_pubkey: &solana_sdk::pubkey::Pubkey,
-        vault_pda: &solana_sdk::pubkey::Pubkey,
+        agent_pubkey: &Pubkey,
+        vault_pda: &Pubkey,
     ) -> Result<(u64, u64), KlaveError> {
-        let (native, vault_info) = tokio::try_join!(
-            self.rpc_client.get_balance(agent_pubkey),
-            self.rpc_client.get_account(vault_pda)
-        )
-        .map_err(|e| KlaveError::Internal(e.to_string()))?;
+        let (sol_lamports, vault_lamports) =
+            tokio::join!(self.get_balance(agent_pubkey), self.get_balance(vault_pda));
 
-        Ok((native, vault_info.lamports))
+        Ok((sol_lamports, vault_lamports))
     }
 
     pub async fn send_transaction(
@@ -80,15 +84,14 @@ impl KoraGateway {
                         .and_then(|s| s.as_str())
                     {
                         if let Ok(bytes) = general_purpose::STANDARD.decode(signed_b64) {
-                            if let Ok(fully_signed_tx) = bincode::deserialize::<
-                                solana_transaction_client::versioned::VersionedTransaction,
-                            >(&bytes)
+                            if let Ok(fully_signed_tx) =
+                                bincode::deserialize::<ClientVersionedTransaction>(&bytes)
                             {
                                 match self
                                     .rpc_client
                                     .send_transaction_with_config(
                                         &fully_signed_tx,
-                                        solana_client::rpc_config::RpcSendTransactionConfig {
+                                        RpcSendTransactionConfig {
                                             skip_preflight: true,
                                             ..Default::default()
                                         },
@@ -138,7 +141,7 @@ impl KoraGateway {
         }
 
         // Fallback or if Kora URL is empty
-        let client_tx: solana_transaction_client::versioned::VersionedTransaction =
+        let client_tx: ClientVersionedTransaction =
             bincode::deserialize(&bincode_tx).map_err(|e| KlaveError::Internal(e.to_string()))?;
         let sig = self
             .rpc_client

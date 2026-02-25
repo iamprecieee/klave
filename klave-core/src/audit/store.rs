@@ -1,3 +1,4 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
@@ -35,7 +36,7 @@ impl AuditStore {
     }
 
     pub async fn append(&self, entry: &NewAuditEntry) -> Result<i64, KlaveError> {
-        let now = chrono::Utc::now().timestamp();
+        let now = Utc::now().timestamp();
         let violations_json = entry
             .policy_violations
             .as_ref()
@@ -80,7 +81,7 @@ impl AuditStore {
     }
 
     pub async fn sum_daily_spend(&self, agent_id: &str) -> Result<f64, KlaveError> {
-        let today_start = chrono::Utc::now()
+        let today_start = Utc::now()
             .date_naive()
             .and_hms_opt(0, 0, 0)
             .expect("valid midnight timestamp")
@@ -105,7 +106,7 @@ impl AuditStore {
     }
 
     pub async fn sum_swap_volume(&self, agent_id: &str) -> Result<f64, KlaveError> {
-        let today_start = chrono::Utc::now()
+        let today_start = Utc::now()
             .date_naive()
             .and_hms_opt(0, 0, 0)
             .expect("valid midnight timestamp")

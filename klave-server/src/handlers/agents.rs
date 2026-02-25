@@ -1,13 +1,15 @@
-use axum::Json;
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
+use solana_sdk::pubkey::Pubkey;
 use tracing::{error, info};
 
 use klave_core::agent::model::{AgentBalance, AgentPolicyInput, CreateAgentRequest};
 
-use crate::response::ApiResponse;
-use crate::state::AppState;
+use crate::{response::ApiResponse, state::AppState};
 
 pub async fn create_agent(
     State(state): State<AppState>,
@@ -116,8 +118,7 @@ pub async fn get_agent_balance(State(state): State<AppState>, Path(id): Path<Str
         }
     };
 
-    let agent_pubkey: solana_sdk::pubkey::Pubkey = match std::str::FromStr::from_str(&agent.pubkey)
-    {
+    let agent_pubkey: Pubkey = match std::str::FromStr::from_str(&agent.pubkey) {
         Ok(pk) => pk,
         Err(_) => {
             return ApiResponse::<()>::error(
@@ -128,11 +129,9 @@ pub async fn get_agent_balance(State(state): State<AppState>, Path(id): Path<Str
         }
     };
 
-    let program_id = solana_sdk::pubkey::Pubkey::new_from_array(klave_anchor::ID.to_bytes());
-    let (vault_pda, _) = solana_sdk::pubkey::Pubkey::find_program_address(
-        &[b"vault", agent_pubkey.as_ref()],
-        &program_id,
-    );
+    let program_id = Pubkey::new_from_array(klave_anchor::ID.to_bytes());
+    let (vault_pda, _) =
+        Pubkey::find_program_address(&[b"vault", agent_pubkey.as_ref()], &program_id);
 
     match state
         .kora_gateway

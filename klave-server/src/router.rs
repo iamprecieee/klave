@@ -1,10 +1,13 @@
-use axum::Router;
-use axum::middleware;
-use axum::routing::{delete, get, post, put};
+use axum::{
+    Router, middleware,
+    routing::{delete, get, post, put},
+};
 
-use crate::handlers::{agents, health, orca, transactions};
-use crate::middleware::api_key_auth;
-use crate::state::AppState;
+use crate::{
+    handlers::{agents, health, orca, transactions},
+    middleware::api_key_auth,
+    state::AppState,
+};
 
 pub fn build_router(state: AppState) -> Router {
     let api_routes = Router::new()
@@ -19,24 +22,10 @@ pub fn build_router(state: AppState) -> Router {
             post(transactions::execute_transaction),
         )
         .route("/agents/{id}/orca/swap", post(orca::execute_swap))
-        .route("/agents/{id}/orca/open-position", post(orca::open_position))
-        .route(
-            "/agents/{id}/orca/position/increase",
-            put(orca::increase_liquidity),
-        )
-        .route(
-            "/agents/{id}/orca/position/decrease",
-            put(orca::decrease_liquidity),
-        )
-        .route("/agents/{id}/orca/harvest", post(orca::harvest))
-        .route(
-            "/agents/{id}/orca/position/{position}",
-            delete(orca::close_position),
-        )
-        .layer(middleware::from_fn_with_state(state.clone(), api_key_auth))
-        .with_state(state);
+        .layer(middleware::from_fn_with_state(state.clone(), api_key_auth));
 
     Router::new()
         .route("/health", get(health::health_check))
         .nest("/api/v1", api_routes)
+        .with_state(state)
 }

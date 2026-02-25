@@ -7,12 +7,13 @@ mod state;
 
 use std::sync::Arc;
 
-use klave_core::agent::repository::AgentRepository;
-use klave_core::agent::signer::AgentSigner;
-use klave_core::audit::store::AuditStore;
-use klave_core::solana::gateway::KoraGateway;
-use klave_core::solana::orca::OrcaClient;
 use tracing::info;
+
+use klave_core::{
+    agent::{repository::AgentRepository, signer::AgentSigner},
+    audit::store::AuditStore,
+    solana::{gateway::KoraGateway, orca::OrcaClient},
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

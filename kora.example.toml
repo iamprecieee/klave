@@ -2,6 +2,7 @@
 rate_limit = 100
 
 [kora.auth]
+api_key = ""
 # Managed by `klave start` — reads KORA_API_KEY from .env
 
 [kora.cache]
@@ -12,7 +13,7 @@ account_ttl = 60
 
 [validation]
 price_source = "Jupiter"
-max_allowed_lamports = 10000000
+max_allowed_lamports = 100000000
 max_signatures = 10
 allow_durable_transactions = false
 
@@ -26,6 +27,7 @@ allowed_programs = [
     "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",  # Memo
     "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",  # Orca Whirlpool
     "9W959DqEETiGZocYWCQPaS2U113wGZpT2NMC9Esh1xM6", # Orca Token Swap
+    "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx", # Klave Vault
 ]
 
 allowed_tokens = [

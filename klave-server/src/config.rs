@@ -19,7 +19,7 @@ impl Config {
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(3000),
-            api_key: std::env::var("KLAVE_API_KEY").unwrap_or_else(|_| "klave-dev-key".to_string()),
+            api_key: std::env::var("KLAVE_API_KEY").expect("KLAVE_API_KEY must be set"),
             solana_rpc_url: std::env::var("SOLANA_RPC_URL")
                 .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string()),
             kora_rpc_url: std::env::var("KORA_RPC_URL")

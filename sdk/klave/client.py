@@ -23,12 +23,7 @@ from klave.models import (
     AgentBalance,
     AgentPolicyInput,
     AuditEntry,
-    ClosePositionRequest,
     CreateAgentRequest,
-    DecreaseLiquidityRequest,
-    HarvestRequest,
-    IncreaseLiquidityRequest,
-    OpenPositionRequest,
     OrcaSwapRequest,
     TxResult,
 )
@@ -110,9 +105,7 @@ class KlaveClient:
         if isinstance(policy, dict):
             policy = AgentPolicyInput(**policy)
         payload = CreateAgentRequest(label=label, policy=policy)
-        data = await self._request(
-            "POST", "/api/v1/agents", json=payload.model_dump()
-        )
+        data = await self._request("POST", "/api/v1/agents", json=payload.model_dump())
         return Agent.model_validate(data)
 
     async def list_agents(self) -> list[Agent]:
@@ -126,16 +119,12 @@ class KlaveClient:
 
     async def get_balance(self, agent_id: str) -> AgentBalance:
         """Fetch the SOL and vault balance for an agent."""
-        data = await self._request(
-            "GET", f"/api/v1/agents/{agent_id}/balance"
-        )
+        data = await self._request("GET", f"/api/v1/agents/{agent_id}/balance")
         return AgentBalance.model_validate(data)
 
     async def get_history(self, agent_id: str) -> list[AuditEntry]:
         """Fetch the audit log for an agent."""
-        data = await self._request(
-            "GET", f"/api/v1/agents/{agent_id}/history"
-        )
+        data = await self._request("GET", f"/api/v1/agents/{agent_id}/history")
         return [AuditEntry.model_validate(item) for item in data]
 
     async def update_policy(
@@ -182,9 +171,7 @@ class KlaveClient:
         )
         return TxResult.model_validate(data)
 
-    async def deposit_to_vault(
-        self, agent_id: str, lamports: int
-    ) -> TxResult:
+    async def deposit_to_vault(self, agent_id: str, lamports: int) -> TxResult:
         """Deposit SOL into the agent's vault."""
         data = await self._request(
             "POST",
@@ -196,9 +183,7 @@ class KlaveClient:
         )
         return TxResult.model_validate(data)
 
-    async def withdraw_from_vault(
-        self, agent_id: str, lamports: int
-    ) -> TxResult:
+    async def withdraw_from_vault(self, agent_id: str, lamports: int) -> TxResult:
         """Withdraw SOL from the agent's vault."""
         data = await self._request(
             "POST",
@@ -221,80 +206,6 @@ class KlaveClient:
         data = await self._request(
             "POST",
             f"/api/v1/agents/{agent_id}/orca/swap",
-            json=req.model_dump(exclude_none=True),
-        )
-        return TxResult.model_validate(data)
-
-    async def open_position(
-        self, agent_id: str, req: OpenPositionRequest | dict[str, Any]
-    ) -> TxResult:
-        """Open a full-range liquidity position on Orca."""
-        if isinstance(req, dict):
-            req = OpenPositionRequest(**req)
-        data = await self._request(
-            "POST",
-            f"/api/v1/agents/{agent_id}/orca/open-position",
-            json=req.model_dump(exclude_none=True),
-        )
-        return TxResult.model_validate(data)
-
-    async def increase_liquidity(
-        self,
-        agent_id: str,
-        req: IncreaseLiquidityRequest | dict[str, Any],
-    ) -> TxResult:
-        """Add liquidity to an existing Orca position."""
-        if isinstance(req, dict):
-            req = IncreaseLiquidityRequest(**req)
-        data = await self._request(
-            "PUT",
-            f"/api/v1/agents/{agent_id}/orca/position/increase",
-            json=req.model_dump(exclude_none=True),
-        )
-        return TxResult.model_validate(data)
-
-    async def decrease_liquidity(
-        self,
-        agent_id: str,
-        req: DecreaseLiquidityRequest | dict[str, Any],
-    ) -> TxResult:
-        """Remove liquidity from an existing Orca position."""
-        if isinstance(req, dict):
-            req = DecreaseLiquidityRequest(**req)
-        data = await self._request(
-            "PUT",
-            f"/api/v1/agents/{agent_id}/orca/position/decrease",
-            json=req.model_dump(exclude_none=True),
-        )
-        return TxResult.model_validate(data)
-
-    async def harvest(
-        self, agent_id: str, req: HarvestRequest | dict[str, Any]
-    ) -> TxResult:
-        """Harvest fees and rewards from an Orca position."""
-        if isinstance(req, dict):
-            req = HarvestRequest(**req)
-        data = await self._request(
-            "POST",
-            f"/api/v1/agents/{agent_id}/orca/harvest",
-            json=req.model_dump(),
-        )
-        return TxResult.model_validate(data)
-
-    async def close_position(
-        self,
-        agent_id: str,
-        position_mint: str,
-        req: ClosePositionRequest | dict[str, Any] | None = None,
-    ) -> TxResult:
-        """Close an Orca liquidity position and reclaim tokens."""
-        if req is None:
-            req = ClosePositionRequest()
-        if isinstance(req, dict):
-            req = ClosePositionRequest(**req)
-        data = await self._request(
-            "DELETE",
-            f"/api/v1/agents/{agent_id}/orca/position/{position_mint}",
             json=req.model_dump(exclude_none=True),
         )
         return TxResult.model_validate(data)

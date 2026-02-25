@@ -85,31 +85,3 @@ class OrcaSwapRequest(BaseModel):
     input_mint: str
     amount: int
     slippage_bps: int | None = None
-
-
-class OpenPositionRequest(BaseModel):
-    whirlpool: str
-    token_max_a: int
-    token_max_b: int
-    slippage_bps: int | None = None
-
-
-class IncreaseLiquidityRequest(BaseModel):
-    position: str
-    amount_a: int
-    amount_b: int
-    slippage_bps: int | None = None
-
-
-class DecreaseLiquidityRequest(BaseModel):
-    position: str
-    liquidity: int
-    slippage_bps: int | None = None
-
-
-class HarvestRequest(BaseModel):
-    position: str
-
-
-class ClosePositionRequest(BaseModel):
-    slippage_bps: int | None = None

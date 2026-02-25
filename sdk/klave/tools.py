@@ -69,15 +69,11 @@ def build_tools(client: KlaveClient) -> list:
         return [e.model_dump() for e in entries]
 
     @tool
-    def transfer_sol(
-        agent_id: str, destination: str, lamports: int
-    ) -> dict:
+    def transfer_sol(agent_id: str, destination: str, lamports: int) -> dict:
         """Transfer SOL from an agent wallet to a destination address.
         Use when the agent needs to send funds. Amount is in lamports
         (1 SOL = 1_000_000_000 lamports)."""
-        result = _run(
-            client.transfer_sol(agent_id, destination, lamports)
-        )
+        result = _run(client.transfer_sol(agent_id, destination, lamports))
         return result.model_dump()
 
     @tool
@@ -110,48 +106,3 @@ def build_tools(client: KlaveClient) -> list:
             )
         )
         return result.model_dump()
-
-    @tool
-    def open_position(
-        agent_id: str,
-        whirlpool: str,
-        token_max_a: int,
-        token_max_b: int,
-        slippage_bps: int = 50,
-    ) -> dict:
-        """Open a full-range liquidity position on Orca. Use when the
-        agent should provide liquidity to earn fees. Specify max amounts
-        for both tokens in the pair."""
-        result = _run(
-            client.open_position(
-                agent_id,
-                {
-                    "whirlpool": whirlpool,
-                    "token_max_a": token_max_a,
-                    "token_max_b": token_max_b,
-                    "slippage_bps": slippage_bps,
-                },
-            )
-        )
-        return result.model_dump()
-
-    @tool
-    def harvest_rewards(agent_id: str, position: str) -> dict:
-        """Harvest accumulated fees and rewards from an Orca liquidity
-        position. Use periodically to collect earned yield."""
-        result = _run(
-            client.harvest(agent_id, {"position": position})
-        )
-        return result.model_dump()
-
-    return [
-        create_agent,
-        list_agents,
-        get_balance,
-        get_history,
-        transfer_sol,
-        deposit_to_vault,
-        swap_tokens,
-        open_position,
-        harvest_rewards,
-    ]

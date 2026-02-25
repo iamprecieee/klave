@@ -2,11 +2,12 @@ use anchor_lang::{InstructionData, ToAccountMetas};
 use axum::{
     Json,
     extract::{Path, State},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
-use klave_anchor::accounts::{InitializeVault, VaultOperation};
-use klave_anchor::instruction::{
-    Deposit as DepInst, InitializeVault as InitInst, Withdraw as WdInst,
+use klave_anchor::{
+    accounts::{InitializeVault, VaultOperation},
+    instruction::{Deposit as DepInst, InitializeVault as InitInst, Withdraw as WdInst},
 };
 use klave_core::{
     audit::store::NewAuditEntry,
@@ -18,9 +19,10 @@ use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     message::Message,
     pubkey::Pubkey,
-    transaction::VersionedTransaction,
+    signature::Signature,
+    transaction::{Transaction, VersionedTransaction},
 };
-use solana_system_interface::program::ID as SYSTEM_PROGRAM_ID;
+use solana_system_interface::{instruction::transfer, program::ID as SYSTEM_PROGRAM_ID};
 use std::str::FromStr;
 
 use crate::{response::ApiResponse, state::AppState};
@@ -46,36 +48,24 @@ pub async fn execute_transaction(
     let agent = match state.agent_repo.find_by_id(&agent_id).await {
         Ok(Some(a)) => a,
         Ok(None) => {
-            return ApiResponse::<()>::error(
-                axum::http::StatusCode::NOT_FOUND,
-                "agent not found".to_string(),
-            )
-            .into_response();
+            return ApiResponse::<()>::error(StatusCode::NOT_FOUND, "agent not found".to_string())
+                .into_response();
         }
         Err(e) => {
-            return ApiResponse::<()>::error(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                e.to_string(),
-            )
-            .into_response();
+            return ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                .into_response();
         }
     };
 
     let policy = match state.agent_repo.find_policy(&agent_id).await {
         Ok(Some(p)) => p,
         Ok(None) => {
-            return ApiResponse::<()>::error(
-                axum::http::StatusCode::NOT_FOUND,
-                "policy not found".to_string(),
-            )
-            .into_response();
+            return ApiResponse::<()>::error(StatusCode::NOT_FOUND, "policy not found".to_string())
+                .into_response();
         }
         Err(e) => {
-            return ApiResponse::<()>::error(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                e.to_string(),
-            )
-            .into_response();
+            return ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                .into_response();
         }
     };
 
@@ -83,7 +73,7 @@ pub async fn execute_transaction(
         Ok(pk) => pk,
         Err(_) => {
             return ApiResponse::<()>::error(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "Invalid agent pubkey".to_string(),
             )
             .into_response();
@@ -104,7 +94,7 @@ pub async fn execute_transaction(
         "agent_withdrawal" => InstructionType::AgentWithdrawal,
         _ => {
             return ApiResponse::<()>::error(
-                axum::http::StatusCode::BAD_REQUEST,
+                StatusCode::BAD_REQUEST,
                 "Unknown instruction type".to_string(),
             )
             .into_response();
@@ -123,8 +113,7 @@ pub async fn execute_transaction(
 
     let payload_amount = payload.amount.unwrap_or(0);
 
-    let to_anchor =
-        |p: solana_sdk::pubkey::Pubkey| anchor_lang::prelude::Pubkey::new_from_array(p.to_bytes());
+    let to_anchor = |p: Pubkey| anchor_lang::prelude::Pubkey::new_from_array(p.to_bytes());
 
     match instruction_type {
         InstructionType::SolTransfer | InstructionType::AgentWithdrawal => {
@@ -133,18 +122,14 @@ pub async fn execute_transaction(
                     Ok(pk) => pk,
                     Err(_) => {
                         return ApiResponse::<()>::error(
-                            axum::http::StatusCode::BAD_REQUEST,
+                            StatusCode::BAD_REQUEST,
                             "Invalid destination".to_string(),
                         )
                         .into_response();
                     }
                 };
 
-            instructions.push(solana_system_interface::instruction::transfer(
-                &agent_pubkey,
-                &dest_pubkey,
-                payload_amount,
-            ));
+            instructions.push(transfer(&agent_pubkey, &dest_pubkey, payload_amount));
             policy_req.program_ids.push(SYSTEM_PROGRAM_ID.to_string());
         }
 
@@ -231,7 +216,7 @@ pub async fn execute_transaction(
         Err(e) => {
             tracing::error!(error = %e, "failed to fetch daily spend");
             return ApiResponse::<()>::error(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to assess daily spend limit".to_string(),
             )
             .into_response();
@@ -240,7 +225,7 @@ pub async fn execute_transaction(
 
     if let Err(violations) = PolicyEngine::evaluate(&policy, &policy_req, daily_spend_usd) {
         return ApiResponse::<()>::error(
-            axum::http::StatusCode::FORBIDDEN,
+            StatusCode::FORBIDDEN,
             format!("Policy Violations: {:?}", violations),
         )
         .into_response();
@@ -249,22 +234,16 @@ pub async fn execute_transaction(
     let signer = match state.agent_signer.load(&agent_id).await {
         Ok(s) => s,
         Err(e) => {
-            return ApiResponse::<()>::error(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                e.to_string(),
-            )
-            .into_response();
+            return ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                .into_response();
         }
     };
 
     let recent_blockhash = match state.kora_gateway.get_latest_blockhash().await {
         Ok(h) => h,
         Err(e) => {
-            return ApiResponse::<()>::error(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                e.to_string(),
-            )
-            .into_response();
+            return ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                .into_response();
         }
     };
 
@@ -276,24 +255,22 @@ pub async fn execute_transaction(
     let mut message = Message::new(&instructions, Some(&kora_pubkey));
     message.recent_blockhash = recent_blockhash;
 
-    // We must build a legacy transaction to properly allocate signature slots
-    // for both the fee payer (Kora) and the agent.
-    let mut legacy_tx = solana_sdk::transaction::Transaction::new_unsigned(message.clone());
+    // Legacy transaction properly allocates signature slots for both the fee payer (Kora) and the agent.
+    let mut legacy_tx = Transaction::new_unsigned(message.clone());
 
     let message_data = message.serialize();
     let keychain_signature = match signer.sign_message(&message_data).await {
         Ok(s) => s,
         Err(e) => {
             return ApiResponse::<()>::error(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to sign message: {}", e),
             )
             .into_response();
         }
     };
 
-    let signature =
-        solana_sdk::signature::Signature::try_from(keychain_signature.as_ref()).unwrap();
+    let signature = Signature::try_from(keychain_signature.as_ref()).unwrap();
 
     // Find the agent's position in the signature array and insert the signature.
     // The fee payer (Kora) is always at index 0. If the agent is also a required signer,
@@ -308,7 +285,7 @@ pub async fn execute_transaction(
 
     if !signers_found {
         return ApiResponse::<()>::error(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             "Agent pubkey not found in transaction signers".to_string(),
         )
         .into_response();
@@ -320,15 +297,42 @@ pub async fn execute_transaction(
         Ok(res) => res,
         Err(e) => {
             return ApiResponse::<()>::error(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Transaction failed: {}", e),
             )
             .into_response();
         }
     };
 
-    // Write audit log entry
-    let metadata = match &policy_req.instruction_type {
+    write_audit_entry(
+        state,
+        agent.id,
+        policy_req.instruction_type,
+        "confirmed".to_string(),
+        tx_sig.to_string(),
+        payload_amount,
+    )
+    .await;
+
+    ApiResponse::success(
+        GatewayResponse {
+            signature: tx_sig.to_string(),
+            via_kora,
+        },
+        "transaction sent",
+    )
+    .into_response()
+}
+
+async fn write_audit_entry(
+    state: AppState,
+    agent_id: String,
+    instruction_type: InstructionType,
+    status: String,
+    tx_signature: String,
+    payload_amount: u64,
+) {
+    let metadata = match instruction_type {
         InstructionType::SolTransfer
         | InstructionType::WithdrawFromVault
         | InstructionType::DepositToVault
@@ -339,21 +343,12 @@ pub async fn execute_transaction(
     };
 
     let entry = NewAuditEntry {
-        agent_id: agent.id.clone(),
-        instruction_type: policy_req.instruction_type.to_string(),
-        status: "confirmed".to_string(),
-        tx_signature: Some(tx_sig.to_string()),
+        agent_id,
+        instruction_type: instruction_type.to_string(),
+        status,
+        tx_signature: Some(tx_signature),
         policy_violations: None,
         metadata,
     };
     let _ = state.audit_store.append(&entry).await;
-
-    ApiResponse::success(
-        GatewayResponse {
-            signature: tx_sig.to_string(),
-            via_kora,
-        },
-        "transaction sent",
-    )
-    .into_response()
 }

@@ -1,12 +1,26 @@
 ---
 name: klave-wallet-api
-description: REST API for autonomous AI agent wallet management on Solana — create wallets, sign transactions, manage liquidity, swap tokens, all gasless via Kora.
+description: REST API for autonomous AI agent wallet management on Solana — create wallets, sign transactions, swap tokens, all gasless via Kora.
 version: 1.0.0
+homepage: https://klave...
+metadata: {"openclaw":{"emoji":"🪙","category":"finance","api_base":"http://localhost:3000"}}
 ---
 
 # KLAVE Agent Wallet API
 
-You are interacting with KLAVE, an agentic wallet infrastructure server on Solana. You can create wallets, transfer SOL, manage a shared vault, swap tokens, and provide liquidity — all without needing SOL for gas fees.
+Welcome to KLAVE. This is an **autonomous participation skill** for AI agents. Follow the playbooks below to integrate.
+
+## Playbooks
+
+| File | URL | Description |
+|------|-----|-------------|
+| **SKILL.md** | `SKILLS.md` | API Reference (this file) |
+| **REGISTER.md** | `docs/REGISTER.md` | How to self-onboard and save credentials |
+| **HEARTBEAT.md** | `docs/HEARTBEAT.md` | Autonomous decision flowchart for periodic tasks |
+
+---
+
+You are interacting with KLAVE, an agentic wallet infrastructure server on Solana. You can create wallets, transfer SOL, manage a shared vault, and swap tokens — all without needing SOL for gas fees.
 
 ## Connection
 
@@ -62,7 +76,7 @@ All responses use a standard envelope:
 ```
 
 After creation, fund the agent wallet externally:
-`solana airdrop 2 <pubkey> --url devnet`
+`solana airdrop 2 <pubkey> --url devnet` or manually send devnet SOL to the agent's `pubkey`.
 
 ### List Agents
 
@@ -183,69 +197,7 @@ All DeFi endpoints return:
 
 Use this when you need to exchange one token for another. The `input_mint` is the token you are selling. The `amount` is in the input token's smallest unit. `slippage_bps` defaults to the agent's policy value if omitted.
 
-### Open Liquidity Position
-
-`POST /api/v1/agents/{id}/orca/open-position`
-
-```json
-{
-  "whirlpool": "pool-address",
-  "token_max_a": 1000000,
-  "token_max_b": 1000000,
-  "slippage_bps": 50
-}
-```
-
-Opens a new concentrated liquidity position (Splash/Full Range) in the specified Orca Whirlpool.
-
-### Increase Liquidity
-
-`PUT /api/v1/agents/{id}/orca/position/increase`
-
-```json
-{
-  "position": "position-mint-address",
-  "amount_a": 500000,
-  "amount_b": 500000,
-  "slippage_bps": 50
-}
-```
-
-### Decrease Liquidity
-
-`PUT /api/v1/agents/{id}/orca/position/decrease`
-
-```json
-{
-  "position": "position-mint-address",
-  "liquidity": 1000000,
-  "slippage_bps": 50
-}
-```
-
-### Harvest Rewards
-
-`POST /api/v1/agents/{id}/orca/harvest`
-
-```json
-{
-  "position": "position-mint-address"
-}
-```
-
-Collects accumulated trading fees and rewards from a liquidity position.
-
-### Close Position
-
-`DELETE /api/v1/agents/{id}/orca/position/{position-mint-address}`
-
-```json
-{
-  "slippage_bps": 50
-}
-```
-
-Removes all liquidity and closes the position.
+---
 
 ---
 
@@ -272,11 +224,8 @@ Every agent has a policy that governs what it can do. The policy is set at creat
 | Agent needs a wallet          | `POST /api/v1/agents`                                           |
 | Check if agent has enough SOL | `GET /api/v1/agents/{id}/balance`                               |
 | Move SOL to another wallet    | `POST /api/v1/agents/{id}/transactions` with `sol_transfer`     |
-| Save SOL in the shared vault  | `POST /api/v1/agents/{id}/transactions` with `deposit_to_vault` |
+| Save SOL in the shared vault  | `POST /api/v1/agents/{id}/transactions` with `deposit_to_vault` (vault MUST be initialized first) |
 | Rebalance token holdings      | `POST /api/v1/agents/{id}/orca/swap`                            |
-| Earn yield on idle tokens     | `POST /api/v1/agents/{id}/orca/open-position`                   |
-| Collect earned fees           | `POST /api/v1/agents/{id}/orca/harvest`                         |
-| Stop providing liquidity      | `DELETE /api/v1/agents/{id}/orca/position/{pubkey}`             |
 | Tighten agent permissions     | `PUT /api/v1/agents/{id}/policy`                                |
 | Review agent activity         | `GET /api/v1/agents/{id}/history`                               |
 

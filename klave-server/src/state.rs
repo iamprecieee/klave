@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use klave_core::agent::repository::AgentRepository;
-use klave_core::agent::signer::AgentSigner;
-use klave_core::audit::store::AuditStore;
-use klave_core::solana::gateway::KoraGateway;
-use klave_core::solana::orca::OrcaClient;
+use klave_core::{
+    agent::{repository::AgentRepository, signer::AgentSigner},
+    audit::store::AuditStore,
+    solana::{gateway::KoraGateway, orca::OrcaClient},
+};
 
 use crate::config::Config;
 

@@ -1,5 +1,3 @@
-"""KLAVE Python SDK — typed async client for the agentic wallet API."""
-
 from klave.client import KlaveClient
 from klave.exceptions import (
     KlaveApiError,
@@ -12,12 +10,7 @@ from klave.models import (
     AgentBalance,
     AgentPolicyInput,
     AuditEntry,
-    ClosePositionRequest,
     CreateAgentRequest,
-    DecreaseLiquidityRequest,
-    HarvestRequest,
-    IncreaseLiquidityRequest,
-    OpenPositionRequest,
     OrcaSwapRequest,
     TxResult,
 )
@@ -32,12 +25,7 @@ __all__ = [
     "AgentBalance",
     "AgentPolicyInput",
     "AuditEntry",
-    "ClosePositionRequest",
     "CreateAgentRequest",
-    "DecreaseLiquidityRequest",
-    "HarvestRequest",
-    "IncreaseLiquidityRequest",
-    "OpenPositionRequest",
     "OrcaSwapRequest",
     "TxResult",
 ]
