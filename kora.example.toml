@@ -25,9 +25,9 @@ allowed_programs = [
     "AddressLookupTab1e1111111111111111111111111",  # Address Lookup Table
     "ComputeBudget111111111111111111111111111111",  # Compute Budget
     "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",  # Memo
-    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",  # Orca Whirlpool
+    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",  # Orca Whirlpool (Mainnet/Devnet)
     "9W959DqEETiGZocYWCQPaS2U113wGZpT2NMC9Esh1xM6", # Orca Token Swap
-    "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx", # Klave Vault
+    "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx", # Orca Whirlpool (Devnet Alternative)
 ]
 
 allowed_tokens = [

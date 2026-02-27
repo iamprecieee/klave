@@ -137,7 +137,10 @@ impl PolicyEngine {
         }
 
         if let Some(ref dest) = request.destination
-            && matches!(request.instruction_type, InstructionType::AgentWithdrawal)
+            && matches!(
+                request.instruction_type,
+                InstructionType::AgentWithdrawal | InstructionType::SolTransfer
+            )
             && (policy.withdrawal_destinations.is_empty()
                 || !policy.withdrawal_destinations.contains(dest))
         {
@@ -367,5 +370,19 @@ mod tests {
         let violations = PolicyEngine::evaluate(&policy, &req, 0.0).unwrap_err();
         assert!(violations.contains(&PolicyViolation::ProgramNotAllowed("any_prog".to_string())));
         assert!(violations.contains(&PolicyViolation::TokenNotAllowed("any_mint".to_string())));
+    }
+
+    #[test]
+    fn test_reject_sol_transfer_destination() {
+        let policy = test_policy();
+        let mut req = base_request();
+        req.instruction_type = InstructionType::SolTransfer;
+        req.destination = Some("attacker_address".to_string());
+        let violations = PolicyEngine::evaluate(&policy, &req, 0.0).unwrap_err();
+        assert!(
+            violations.contains(&PolicyViolation::WithdrawalDestinationNotAllowed(
+                "attacker_address".to_string()
+            ))
+        );
     }
 }

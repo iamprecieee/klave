@@ -1,9 +1,11 @@
 mod deploy;
 mod init;
 mod start;
+mod ui;
 mod utils;
 
 use clap::{Parser, Subcommand};
+use console::style;
 
 /// KLAVE — Agentic wallet infrastructure for Solana.
 #[derive(Parser)]
@@ -44,9 +46,10 @@ enum Commands {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+    ui::banner();
 
     let result = match cli.command {
-        Commands::Init => init::run(),
+        Commands::Init => init::run().await,
         Commands::Start {
             with_kora,
             dashboard,
@@ -56,7 +59,7 @@ async fn main() {
     };
 
     if let Err(e) = result {
-        eprintln!("\x1b[31merror:\x1b[0m {e}");
+        eprintln!("\n{} {}", style("error:").red().bold(), e);
         std::process::exit(1);
     }
 }

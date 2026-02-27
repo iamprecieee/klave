@@ -12,11 +12,22 @@ use tracing::info;
 use klave_core::{
     agent::{repository::AgentRepository, signer::AgentSigner},
     audit::store::AuditStore,
+    price::PriceFeed,
     solana::{gateway::KoraGateway, orca::OrcaClient},
 };
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
+    // Custom tokio runtime with larger stack size for worker threads.
+    // The Orca SDK's tick array traversal can cause stack overflow with default 2MB stack.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(8 * 1024 * 1024) // 8MB stack
+        .build()?;
+
+    runtime.block_on(async_main())
+}
+
+async fn async_main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
     tracing_subscriber::fmt()
@@ -47,6 +58,8 @@ async fn main() -> anyhow::Result<()> {
     ));
     let orca_client = Arc::new(OrcaClient::new(rpc_client));
 
+    let price_feed = Arc::new(PriceFeed::new(config.jupiter_api_key.clone()));
+
     let state = state::AppState {
         agent_repo,
         audit_store,
@@ -54,6 +67,7 @@ async fn main() -> anyhow::Result<()> {
         agent_signer,
         kora_gateway,
         orca_client,
+        price_feed,
     };
 
     let cors = tower_http::cors::CorsLayer::permissive();

@@ -91,7 +91,7 @@ impl AuditStore {
         let row: (f64,) = sqlx::query_as(
             "SELECT CAST(COALESCE(SUM( \
                  CASE WHEN json_valid(metadata) \
-                      THEN json_extract(metadata, '$.lamports') \
+                      THEN COALESCE(json_extract(metadata, '$.usd_value'), 0) \
                       ELSE 0 END \
              ), 0) AS REAL) as total \
              FROM audit_log \

@@ -9,9 +9,6 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 
-# ── Agent lifecycle ──────────────────────────────────────────────
-
-
 class AgentPolicyInput(BaseModel):
     """Mutable input for creating/updating an agent's policy."""
 
@@ -49,9 +46,6 @@ class AgentBalance(BaseModel):
     vault_lamports: int
 
 
-# ── Audit ────────────────────────────────────────────────────────
-
-
 class AuditEntry(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -65,19 +59,20 @@ class AuditEntry(BaseModel):
     metadata: str | None = None
 
 
-# ── Transaction gateway ─────────────────────────────────────────
-
-
 class TxResult(BaseModel):
     """Result of a gateway or Orca transaction."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     signature: str
     via_kora: bool
 
-
-# ── Orca DeFi ────────────────────────────────────────────────────
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        """Accept both 'signature' and 'tx_signature' from server responses."""
+        if isinstance(obj, dict) and "tx_signature" in obj and "signature" not in obj:
+            obj = {**obj, "signature": obj["tx_signature"]}
+        return super().model_validate(obj, **kwargs)
 
 
 class OrcaSwapRequest(BaseModel):

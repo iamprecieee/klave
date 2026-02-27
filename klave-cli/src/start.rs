@@ -1,36 +1,11 @@
-use std::path::PathBuf;
+use std::os::unix::io::AsRawFd;
 use std::process::Stdio;
+
 use tokio::process::Command;
 use tokio::signal;
 
-use crate::utils::set_key;
-
-fn project_root() -> PathBuf {
-    let mut dir = std::env::current_dir().expect("cannot read cwd");
-    loop {
-        let candidate = dir.join("Cargo.toml");
-        if candidate.exists() {
-            let content = std::fs::read_to_string(&candidate).unwrap_or_default();
-            if content.contains("[workspace]") {
-                return dir;
-            }
-        }
-        if !dir.pop() {
-            return std::env::current_dir().expect("cannot read cwd");
-        }
-    }
-}
-
-fn print_status(service: &str, msg: &str, color: &str) {
-    let code = match color {
-        "green" => "\x1b[32m",
-        "yellow" => "\x1b[33m",
-        "red" => "\x1b[31m",
-        "cyan" => "\x1b[36m",
-        _ => "\x1b[0m",
-    };
-    eprintln!("  {code}[{service}]\x1b[0m {msg}");
-}
+use crate::ui;
+use crate::utils::project_root;
 
 pub async fn run(
     with_kora: bool,
@@ -46,18 +21,29 @@ pub async fn run(
 
     dotenvy::from_path(&env_path)?;
 
-    println!("\x1b[1mKLAVE start\x1b[0m");
-    println!();
+    ui::flow_start("start");
+    ui::flow_blank();
 
-    // ── Build workspace ──────────────────────────────────────────
-    let profile = if release { "release" } else { "dev" };
-    print_status(
-        "build",
-        &format!("compiling workspace ({profile})..."),
-        "cyan",
+    let profile_str = if release { "release" } else { "dev" };
+    let kora_str = if with_kora { "enabled" } else { "disabled" };
+    let dash_str = if dashboard { "enabled" } else { "disabled" };
+
+    ui::flow_box(
+        "Configuration",
+        &[
+            ("profile", profile_str),
+            ("kora", kora_str),
+            ("dashboard", dash_str),
+        ],
     );
 
-    let mut build_args = vec!["build", "--workspace"];
+    ui::flow_blank();
+
+    ui::flow_step("Compiling workspace...");
+
+    let pb = ui::make_spinner("Assembling binaries...");
+
+    let mut build_args = vec!["build", "--workspace", "--quiet"];
     if release {
         build_args.push("--release");
     }
@@ -65,34 +51,30 @@ pub async fn run(
     let build_status = Command::new("cargo")
         .args(&build_args)
         .current_dir(&root)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .await?;
 
-    if !build_status.success() {
-        return Err("klave-server build failed".into());
-    }
-    print_status("build", "done", "green");
+    pb.finish_and_clear();
 
-    // Resolve binary path.
+    if !build_status.success() {
+        return Err("Build failed. Run `cargo build` manually to see errors.\n".into());
+    }
+    ui::flow_done("Build complete");
+
+    ui::flow_blank();
+
     let target_dir = if release { "release" } else { "debug" };
     let server_bin = root.join(format!("target/{target_dir}/klave-server"));
 
-    if !server_bin.exists() {
-        return Err(format!("binary not found at {}", server_bin.display()).into());
-    }
-
-    // ── Spawn children ──────────────────────────────────────────
     let mut children: Vec<(String, tokio::process::Child)> = Vec::new();
+    let mut service_rows: Vec<(&str, String)> = Vec::new();
 
     // Kora (optional).
     if with_kora {
-        print_status("kora", "starting...", "cyan");
-
         let kora_toml_path = root.join("kora.toml");
-
-        // Patch kora.toml price_source based on JUPITER_API_KEY availability.
+        let price_source;
         if kora_toml_path.exists() {
             let mut kora_cfg = std::fs::read_to_string(&kora_toml_path)?;
             let has_jupiter_key = std::env::var("JUPITER_API_KEY")
@@ -101,81 +83,53 @@ pub async fn run(
                 .is_some();
 
             if has_jupiter_key {
-                if kora_cfg.contains("price_source = \"Mock\"") {
-                    kora_cfg =
-                        kora_cfg.replace("price_source = \"Mock\"", "price_source = \"Jupiter\"");
-                    std::fs::write(&kora_toml_path, &kora_cfg)?;
-                    print_status(
-                        "kora",
-                        "using Jupiter pricing (JUPITER_API_KEY set)",
-                        "green",
-                    );
-                }
+                kora_cfg =
+                    kora_cfg.replace("price_source = \"Mock\"", "price_source = \"Jupiter\"");
+                price_source = "Jupiter";
             } else {
-                if kora_cfg.contains("price_source = \"Jupiter\"") {
-                    kora_cfg =
-                        kora_cfg.replace("price_source = \"Jupiter\"", "price_source = \"Mock\"");
-                    std::fs::write(&kora_toml_path, &kora_cfg)?;
-                }
-                print_status(
-                    "kora",
-                    "using Mock pricing (set JUPITER_API_KEY for real prices)",
-                    "yellow",
-                );
+                kora_cfg =
+                    kora_cfg.replace("price_source = \"Jupiter\"", "price_source = \"Mock\"");
+                price_source = "Mock";
             }
+            std::fs::write(&kora_toml_path, &kora_cfg)?;
+        } else {
+            price_source = "Mock";
         }
 
         let rpc_url = std::env::var("SOLANA_RPC_URL")
             .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-        let kora_api_key = std::env::var("KORA_API_KEY").ok().filter(|k| !k.is_empty());
 
-        if kora_toml_path.exists() {
-            let mut kora_cfg = std::fs::read_to_string(&kora_toml_path)?;
-            if let Some(key) = &kora_api_key {
-                let mut lines = kora_cfg
-                    .lines()
-                    .map(|line| line.to_string())
-                    .collect::<Vec<_>>();
-                set_key(&mut lines, "api_key = ", &format!("\"{}\"", key));
-                kora_cfg = lines.join("\n");
-                std::fs::write(&kora_toml_path, &kora_cfg)?;
-            }
-        }
-
-        let kora_args = vec![
-            "--rpc-url".to_string(),
-            rpc_url,
-            "rpc".to_string(),
-            "start".to_string(),
-            "--signers-config".to_string(),
-            "signers.toml".to_string(),
-        ];
-
+        let kora_log = std::fs::File::create(root.join("kora.log"))?;
+        let kora_log_err = kora_log.try_clone()?;
         let kora_child = Command::new("kora")
-            .args(&kora_args)
+            .args([
+                "--rpc-url",
+                &rpc_url,
+                "rpc",
+                "start",
+                "--signers-config",
+                "signers.toml",
+            ])
             .current_dir(&root)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
+            .stdout(Stdio::from(kora_log))
+            .stderr(Stdio::from(kora_log_err))
             .spawn();
 
         match kora_child {
             Ok(child) => {
                 children.push(("kora".to_string(), child));
-                print_status("kora", "running", "green");
+                service_rows.push(("kora", format!("ACTIVE ({})", price_source)));
             }
-            Err(e) => {
-                print_status("kora", &format!("failed to start: {e}"), "red");
-                eprintln!("         Is `kora` installed? Install with: cargo install kora");
-                eprintln!("         Continuing without Kora — server will use direct RPC.");
+            Err(_) => {
+                service_rows.push(("kora", "offline (binary not found)".to_string()));
             }
         }
     }
 
-    // Dashboard (optional) — simple Python http.server on port 8888.
+    // Dashboard (optional)
     if dashboard {
         let dashboard_dir = root.join("dashboard");
         if dashboard_dir.exists() {
-            print_status("dashboard", "serving on http://localhost:8888", "cyan");
             let dash_child = Command::new("python3")
                 .args(["-m", "http.server", "8888", "--bind", "127.0.0.1"])
                 .current_dir(&dashboard_dir)
@@ -183,64 +137,97 @@ pub async fn run(
                 .stderr(Stdio::null())
                 .spawn();
 
-            match dash_child {
-                Ok(child) => {
-                    children.push(("dashboard".to_string(), child));
-                    print_status("dashboard", "http://localhost:8888", "green");
-                }
-                Err(e) => {
-                    print_status("dashboard", &format!("failed: {e}"), "red");
-                }
+            if let Ok(child) = dash_child {
+                children.push(("dashboard".to_string(), child));
+                let api_key = std::env::var("KLAVE_OPERATOR_API_KEY").unwrap_or_default();
+                service_rows.push(("dashboard", format!("http://localhost:8888?key={api_key}")));
             }
-        } else {
-            print_status(
-                "dashboard",
-                "dashboard/ directory not found, skipping",
-                "yellow",
-            );
         }
     }
 
     // KLAVE server.
-    print_status("server", "starting...", "cyan");
+    let log_file = std::fs::File::create(root.join("klave.log"))?;
+    let log_file_err = log_file.try_clone()?;
     let server_child = Command::new(&server_bin)
         .current_dir(&root)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
+        .stdout(Stdio::from(log_file))
+        .stderr(Stdio::from(log_file_err))
         .spawn()?;
 
     children.push(("server".to_string(), server_child));
-
     let port = std::env::var("KLAVE_PORT").unwrap_or_else(|_| "3000".to_string());
-    print_status("server", &format!("http://localhost:{port}"), "green");
+    service_rows.push(("server", format!("http://localhost:{port}")));
+    service_rows.push(("logs", "klave.log".to_string()));
 
-    println!();
-    println!("  Press \x1b[1mCtrl+C\x1b[0m to stop all services.");
-    println!();
+    let rows_ref: Vec<(&str, &str)> = service_rows.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    ui::flow_box("Services", &rows_ref);
 
-    // ── Wait for Ctrl+C ─────────────────────────────────────────
+    ui::flow_blank();
+
+    ui::flow_step("Ready");
+    ui::flow_line("Accepting autonomous agent connections.");
+    ui::flow_line(&format!(
+        "Press {} to terminate all services.",
+        ui::brand("Ctrl+C")
+    ));
+    ui::flow_blank();
+
+    // Suppress the ^C echo when the user presses Ctrl+C.
+    #[cfg(unix)]
+    let _termios_guard = suppress_ctrl_c_echo();
+
     signal::ctrl_c().await?;
 
-    println!();
-    print_status("shutdown", "stopping services...", "yellow");
-
+    ui::flow_blank();
+    ui::flow_step("Shutting down...");
     for (name, mut child) in children.into_iter().rev() {
-        // Send SIGTERM on Unix, kill on Windows.
         #[cfg(unix)]
         {
             if let Some(pid) = child.id() {
                 unsafe {
                     libc::kill(pid as i32, libc::SIGTERM);
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             }
         }
-
         let _ = child.kill().await;
         let _ = child.wait().await;
-        print_status(&name, "stopped", "green");
+        ui::flow_line(&format!("{} detached", ui::dim(&name)));
     }
 
-    print_status("shutdown", "all services stopped", "green");
+    ui::flow_blank();
+    ui::flow_end("Session terminated. Goodbye!");
+    println!();
     Ok(())
+}
+
+// ── Suppress ^C echo ────────────────────────────────────────────
+
+#[cfg(unix)]
+struct TermiosGuard {
+    fd: i32,
+    original: libc::termios,
+}
+
+#[cfg(unix)]
+impl Drop for TermiosGuard {
+    fn drop(&mut self) {
+        unsafe { libc::tcsetattr(self.fd, libc::TCSANOW, &self.original) };
+    }
+}
+
+#[cfg(unix)]
+fn suppress_ctrl_c_echo() -> Option<TermiosGuard> {
+    let fd = std::io::stdin().as_raw_fd();
+    let mut termios: libc::termios = unsafe { std::mem::zeroed() };
+    if unsafe { libc::tcgetattr(fd, &mut termios) } != 0 {
+        return None;
+    }
+    let guard = TermiosGuard {
+        fd,
+        original: termios,
+    };
+    termios.c_lflag &= !libc::ECHOCTL;
+    unsafe { libc::tcsetattr(fd, libc::TCSANOW, &termios) };
+    Some(guard)
 }

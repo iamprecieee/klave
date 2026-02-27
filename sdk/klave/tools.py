@@ -1,8 +1,8 @@
 """LangChain tool wrappers for the KLAVE agentic wallet API.
 
 Each tool wraps a single KlaveClient method so an LLM can autonomously
-invoke wallet operations. Tools are synchronous (LangChain convention)
-and run the async client via asyncio.
+invoke wallet operations. Tools are natively async to ensure compatibility
+with modern LangChain agents and async event loops.
 
 Usage::
 
@@ -16,75 +16,81 @@ Usage::
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any
+import json
+from pathlib import Path
 
 from langchain_core.tools import tool
 
 from klave.client import KlaveClient
 
 
-def _run(coro: Any) -> Any:
-    """Run an async coroutine from a sync LangChain tool."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    import concurrent.futures
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return loop.run_in_executor(pool, asyncio.run, coro)
-
-
 def build_tools(client: KlaveClient) -> list:
     """Build a list of LangChain tools bound to the given client."""
 
     @tool
-    def create_agent(label: str) -> dict:
-        """Create a new agent wallet. Use when you need a fresh wallet
+    async def create_agent(label: str) -> dict:
+        """Create a new agent wallet. Use to create a fresh wallet
         with its own keypair and policy. Returns the agent's ID and
         public key."""
-        agent = _run(client.create_agent(label))
-        return agent.model_dump()
+        try:
+            agent = await client.create_agent(label)
+            return agent.model_dump()
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
 
     @tool
-    def list_agents() -> list[dict]:
+    async def list_agents() -> list[dict]:
         """List all registered agent wallets. Use to discover existing
         agents and their current status."""
-        agents = _run(client.list_agents())
-        return [a.model_dump() for a in agents]
+        try:
+            agents = await client.list_agents()
+            return [agent.model_dump() for agent in agents]
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
 
     @tool
-    def get_balance(agent_id: str) -> dict:
+    async def get_balance(agent_id: str) -> dict:
         """Check the SOL and vault balance for an agent wallet. Use
         before transferring or swapping to confirm sufficient funds."""
-        balance = _run(client.get_balance(agent_id))
-        return balance.model_dump()
+        try:
+            balance = await client.get_balance(agent_id)
+            return balance.model_dump()
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
 
     @tool
-    def get_history(agent_id: str) -> list[dict]:
+    async def get_history(agent_id: str) -> list[dict]:
         """Fetch the transaction history for an agent. Use to review
         past actions, audit outcomes, or verify a transaction landed."""
-        entries = _run(client.get_history(agent_id))
-        return [e.model_dump() for e in entries]
+        try:
+            entries = await client.get_history(agent_id)
+            return [e.model_dump() for e in entries]
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
 
     @tool
-    def transfer_sol(agent_id: str, destination: str, lamports: int) -> dict:
+    async def transfer_sol(agent_id: str, destination: str, lamports: int) -> dict:
         """Transfer SOL from an agent wallet to a destination address.
         Use when the agent needs to send funds. Amount is in lamports
         (1 SOL = 1_000_000_000 lamports)."""
-        result = _run(client.transfer_sol(agent_id, destination, lamports))
-        return result.model_dump()
+        try:
+            result = await client.transfer_sol(agent_id, destination, lamports)
+            return result.model_dump()
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
 
     @tool
-    def deposit_to_vault(agent_id: str, lamports: int) -> dict:
+    async def deposit_to_vault(agent_id: str, lamports: int) -> dict:
         """Deposit SOL into the agent's on-chain vault for safekeeping.
         Use to park funds securely in the Anchor treasury PDA."""
-        result = _run(client.deposit_to_vault(agent_id, lamports))
-        return result.model_dump()
+        try:
+            result = await client.deposit_to_vault(agent_id, lamports)
+            return result.model_dump()
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
 
     @tool
-    def swap_tokens(
+    async def swap_tokens(
         agent_id: str,
         whirlpool: str,
         input_mint: str,
@@ -94,8 +100,8 @@ def build_tools(client: KlaveClient) -> list:
         """Swap one token for another via Orca Whirlpools. Use when
         the agent needs to rebalance holdings or acquire a specific
         token. Requires the whirlpool address and input mint."""
-        result = _run(
-            client.swap_tokens(
+        try:
+            result = await client.swap_tokens(
                 agent_id,
                 {
                     "whirlpool": whirlpool,
@@ -104,5 +110,164 @@ def build_tools(client: KlaveClient) -> list:
                     "slippage_bps": slippage_bps,
                 },
             )
-        )
-        return result.model_dump()
+            return result.model_dump()
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
+
+    @tool
+    async def initialize_vault(agent_id: str) -> dict:
+        """Initialize the agent's on-chain vault PDA in the Anchor treasury
+        program. Must be called once before any deposit or withdraw."""
+        try:
+            result = await client.initialize_vault(agent_id)
+            return result.model_dump()
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
+
+    @tool
+    async def withdraw_from_vault(agent_id: str, lamports: int) -> dict:
+        """Withdraw SOL from the agent's on-chain vault back to their
+        wallet. Amount is in lamports (1 SOL = 1_000_000_000 lamports)."""
+        try:
+            result = await client.withdraw_from_vault(agent_id, lamports)
+            return result.model_dump()
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
+
+    @tool
+    async def delete_agent(agent_id: str) -> str:
+        """Deactivate an agent wallet. The keypair is never reused.
+        Use when an agent should be permanently retired."""
+        try:
+            await client.delete_agent(agent_id)
+            return "agent deactivated"
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
+
+    @tool
+    async def update_policy(
+        agent_id: str,
+        allowed_programs: list[str] | None = None,
+        max_lamports_per_tx: int | None = None,
+        token_allowlist: list[str] | None = None,
+        daily_spend_limit_usd: float | None = None,
+        daily_swap_volume_usd: float | None = None,
+        slippage_bps: int | None = None,
+        withdrawal_destinations: list[str] | None = None,
+    ) -> dict:
+        """Update the policy for an agent. Only the provided fields are
+        changed; omitted fields keep their current values. Use to tighten
+        or loosen agent permissions."""
+        try:
+            fields = {
+                "allowed_programs": allowed_programs,
+                "max_lamports_per_tx": max_lamports_per_tx,
+                "token_allowlist": token_allowlist,
+                "daily_spend_limit_usd": daily_spend_limit_usd,
+                "daily_swap_volume_usd": daily_swap_volume_usd,
+                "slippage_bps": slippage_bps,
+                "withdrawal_destinations": withdrawal_destinations,
+            }
+            policy = {k: v for k, v in fields.items() if v is not None}
+            result = await client.update_policy(agent_id, policy)
+            return result
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
+
+    @tool
+    async def list_pools(token: str | None = None, limit: int = 20) -> dict:
+        """List available Orca Whirlpools for discoverability. Use to find
+        valid pool addresses for a specific token mint."""
+        try:
+            result = await client.list_pools(token, limit)
+            return result
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
+
+    @tool
+    async def get_quote(
+        agent_id: str,
+        whirlpool: str,
+        input_mint: str,
+        amount: int,
+        slippage_bps: int = 50,
+    ) -> dict:
+        """Fetch a simulated swap quote from Orca. Use BEFORE swapping
+        to verify expected output and minimum received amount."""
+        try:
+            result = await client.get_quote(
+                agent_id,
+                {
+                    "whirlpool": whirlpool,
+                    "input_mint": input_mint,
+                    "amount": amount,
+                    "slippage_bps": slippage_bps,
+                },
+            )
+            return result
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
+
+    @tool
+    async def get_health() -> dict[str, str]:
+        """Check the system health status. Use to verify that the
+        KLAVE infrastructure is operational before performing actions."""
+        try:
+            result = await client.get_health()
+            return result
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
+
+    @tool
+    async def list_tokens(agent_id: str) -> list[dict]:
+        """Fetch SPL token balances for an agent. Use to discover
+        current token holdings before rebalancing."""
+        try:
+            result = await client.list_tokens(agent_id)
+            return result
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
+
+    @tool
+    async def save_heartbeat(
+        sol_lamports: int,
+        vault_lamports: int,
+        token_count: int,
+        action_taken: str,
+        errors: int = 0,
+    ) -> str:
+        """Records the outcome of the current heartbeat cycle to a local
+        state file. Use at the END of every cycle to maintain persistence."""
+        try:
+            state = {
+                "last_check": int(Path(__file__).stat().st_mtime),
+                "sol_lamports": sol_lamports,
+                "vault_lamports": vault_lamports,
+                "token_count": token_count,
+                "action_taken": action_taken,
+                "errors": errors,
+            }
+            path = Path.cwd() / "heartbeat.json"
+            path.write_text(json.dumps(state, indent=2))
+            return f"State saved to {path}"
+        except Exception as e:
+            return f"[ERROR] Failed to save state: {str(e)}"
+
+    return [
+        create_agent,
+        list_agents,
+        get_balance,
+        get_history,
+        transfer_sol,
+        deposit_to_vault,
+        swap_tokens,
+        initialize_vault,
+        withdraw_from_vault,
+        delete_agent,
+        update_policy,
+        list_pools,
+        get_quote,
+        get_health,
+        list_tokens,
+        save_heartbeat,
+    ]

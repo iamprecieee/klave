@@ -61,3 +61,20 @@ pub struct AgentBalance {
     pub sol_lamports: u64,
     pub vault_lamports: u64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenBalance {
+    pub mint: String,
+    pub amount: u64,
+    pub decimals: u8,
+    pub ui_amount: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwapQuote {
+    pub input_amount: u64,
+    pub output_amount: u64,
+    pub min_output_amount: u64,
+    pub price_impact_bps: u64,
+    pub fee_amount: u64,
+}

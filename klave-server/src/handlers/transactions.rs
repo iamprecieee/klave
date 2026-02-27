@@ -211,7 +211,7 @@ pub async fn execute_transaction(
         _ => {}
     }
 
-    let daily_spend_usd = match state.audit_store.sum_daily_spend(&agent.id).await {
+    let past_spend_usd = match state.audit_store.sum_daily_spend(&agent.id).await {
         Ok(s) => s,
         Err(e) => {
             tracing::error!(error = %e, "failed to fetch daily spend");
@@ -222,11 +222,23 @@ pub async fn execute_transaction(
             .into_response();
         }
     };
+    let tx_usd_value = state.price_feed.lamports_to_usd(payload_amount).await;
+    let daily_spend_usd = past_spend_usd + tx_usd_value;
 
     if let Err(violations) = PolicyEngine::evaluate(&policy, &policy_req, daily_spend_usd) {
+        let violation_strings: Vec<String> = violations.iter().map(|v| v.to_string()).collect();
+        let entry = NewAuditEntry {
+            agent_id: agent.id.clone(),
+            instruction_type: policy_req.instruction_type.to_string(),
+            status: "rejected".to_string(),
+            tx_signature: None,
+            policy_violations: Some(violation_strings.clone()),
+            metadata: None,
+        };
+        let _ = state.audit_store.append(&entry).await;
         return ApiResponse::<()>::error(
             StatusCode::FORBIDDEN,
-            format!("Policy Violations: {:?}", violations),
+            format!("Policy Violations: {:?}", violation_strings),
         )
         .into_response();
     }
@@ -270,7 +282,16 @@ pub async fn execute_transaction(
         }
     };
 
-    let signature = Signature::try_from(keychain_signature.as_ref()).unwrap();
+    let signature = match Signature::try_from(keychain_signature.as_ref()) {
+        Ok(s) => s,
+        Err(e) => {
+            return ApiResponse::<()>::error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Invalid signature bytes: {}", e),
+            )
+            .into_response();
+        }
+    };
 
     // Find the agent's position in the signature array and insert the signature.
     // The fee payer (Kora) is always at index 0. If the agent is also a required signer,
@@ -304,6 +325,7 @@ pub async fn execute_transaction(
         }
     };
 
+    let usd_value = state.price_feed.lamports_to_usd(payload_amount).await;
     write_audit_entry(
         state,
         agent.id,
@@ -311,6 +333,7 @@ pub async fn execute_transaction(
         "confirmed".to_string(),
         tx_sig.to_string(),
         payload_amount,
+        usd_value,
     )
     .await;
 
@@ -331,13 +354,14 @@ async fn write_audit_entry(
     status: String,
     tx_signature: String,
     payload_amount: u64,
+    usd_value: f64,
 ) {
     let metadata = match instruction_type {
         InstructionType::SolTransfer
         | InstructionType::WithdrawFromVault
         | InstructionType::DepositToVault
         | InstructionType::AgentWithdrawal => {
-            Some(serde_json::json!({ "lamports": payload_amount }))
+            Some(serde_json::json!({ "lamports": payload_amount, "usd_value": usd_value }))
         }
         _ => None,
     };

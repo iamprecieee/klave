@@ -3,13 +3,17 @@ use std::sync::Arc;
 use base64::{Engine as _, engine::general_purpose};
 use reqwest::Client;
 use serde_json::json;
-use solana_client::{nonblocking::rpc_client::RpcClient, rpc_config::RpcSendTransactionConfig};
+use solana_account_decoder::UiAccountData;
+use solana_client::{
+    nonblocking::rpc_client::RpcClient, rpc_config::RpcSendTransactionConfig,
+    rpc_request::TokenAccountsFilter,
+};
 use solana_sdk::{
     hash::Hash, pubkey::Pubkey, signature::Signature, transaction::VersionedTransaction,
 };
 use solana_transaction_client::versioned::VersionedTransaction as ClientVersionedTransaction;
 
-use crate::error::KlaveError;
+use crate::{agent::model::TokenBalance, error::KlaveError};
 
 pub struct KoraGateway {
     kora_rpc_url: String,
@@ -48,6 +52,71 @@ impl KoraGateway {
             tokio::join!(self.get_balance(agent_pubkey), self.get_balance(vault_pda));
 
         Ok((sol_lamports, vault_lamports))
+    }
+
+    pub async fn get_token_balances(
+        &self,
+        owner: &Pubkey,
+    ) -> Result<Vec<crate::agent::model::TokenBalance>, KlaveError> {
+        let accounts = self
+            .rpc_client
+            .get_token_accounts_by_owner(
+                owner,
+                TokenAccountsFilter::ProgramId(
+                    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                        .parse()
+                        .unwrap(),
+                ),
+            )
+            .await
+            .map_err(|e| KlaveError::Internal(e.to_string()))?;
+
+        let mut balances = Vec::new();
+        for keyed_account in accounts {
+            if let UiAccountData::Json(parsed) = keyed_account.account.data {
+                if parsed.program == "spl-token"
+                    && parsed.parsed.get("type").and_then(|t| t.as_str()) == Some("account")
+                {
+                    let info = parsed
+                        .parsed
+                        .get("info")
+                        .ok_or_else(|| KlaveError::Internal("Missing info".into()))?;
+                    let mint = info
+                        .get("mint")
+                        .and_then(|m| m.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let token_amount = info
+                        .get("tokenAmount")
+                        .ok_or_else(|| KlaveError::Internal("Missing tokenAmount".into()))?;
+
+                    let amount_str = token_amount
+                        .get("amount")
+                        .and_then(|a| a.as_str())
+                        .unwrap_or("0");
+                    let amount = amount_str.parse().unwrap_or(0);
+                    let decimals = token_amount
+                        .get("decimals")
+                        .and_then(|d| d.as_u64())
+                        .unwrap_or(0) as u8;
+                    let ui_amount = token_amount
+                        .get("uiAmount")
+                        .and_then(|u| u.as_f64())
+                        .unwrap_or(0.0);
+
+                    if amount > 0 {
+                        balances.push(TokenBalance {
+                            mint,
+                            amount,
+                            decimals,
+                            ui_amount,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(balances)
     }
 
     pub async fn send_transaction(

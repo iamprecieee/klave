@@ -10,6 +10,7 @@ klave-anchor = { path = "../klave-anchor/programs/klave-anchor", features = [
 
 chrono = { workspace = true }
 orca_whirlpools = { workspace = true }
+orca_whirlpools_client = { workspace = true }
 orca_whirlpools_core = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
@@ -17,7 +18,7 @@ serde_json = { workspace = true }
 solana-client = { workspace = true }
 solana-keychain = { workspace = true }
 solana-sdk = { workspace = true }
-solana-system-interface = { workspace= true }
+solana-system-interface = { workspace = true }
 sqlx = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -29,6 +30,7 @@ anchor-client = "0.32.1"
 base64 = "0.22.1"
 bincode = "1.3.3"
 reqwest = { version = "0.12.18", features = ["json"] }
+solana-account-decoder = "3.1.9"
 solana-commitment-config = "3"
 solana-transaction-client = { package = "solana-transaction", version = "3" }
 
