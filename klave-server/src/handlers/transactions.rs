@@ -1,13 +1,16 @@
 use anchor_lang::{InstructionData, ToAccountMetas};
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use klave_anchor::{
-    accounts::{InitializeVault, VaultOperation},
-    instruction::{Deposit as DepInst, InitializeVault as InitInst, Withdraw as WdInst},
+    accounts::{CloseVault, InitializeVault, VaultOperation},
+    instruction::{
+        CloseVault as CloseInst, Deposit as DepInst, InitializeVault as InitInst,
+        Withdraw as WdInst,
+    },
 };
 use klave_core::{
     audit::store::NewAuditEntry,
@@ -24,8 +27,9 @@ use solana_sdk::{
 };
 use solana_system_interface::{instruction::transfer, program::ID as SYSTEM_PROGRAM_ID};
 use std::str::FromStr;
+use uuid::Uuid;
 
-use crate::{response::ApiResponse, state::AppState};
+use crate::{event::ServerEvent, middleware::AuthContext, response::ApiResponse, state::AppState};
 
 #[derive(Deserialize)]
 pub struct GatewayRequest {
@@ -42,9 +46,20 @@ pub struct GatewayResponse {
 
 pub async fn execute_transaction(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(agent_id): Path<String>,
     Json(payload): Json<GatewayRequest>,
 ) -> Response {
+    if !auth.is_operator && auth.agent_id.as_deref() != Some(&agent_id) {
+        return ApiResponse::<()>::error(StatusCode::FORBIDDEN, "Forbidden".to_string())
+            .into_response();
+    }
+
+    if Uuid::parse_str(&agent_id).is_err() {
+        return ApiResponse::<()>::error(StatusCode::BAD_REQUEST, "Invalid Agent ID format")
+            .into_response();
+    }
+
     let agent = match state.agent_repo.find_by_id(&agent_id).await {
         Ok(Some(a)) => a,
         Ok(None) => {
@@ -92,6 +107,7 @@ pub async fn execute_transaction(
         "deposit_to_vault" => InstructionType::DepositToVault,
         "withdraw_from_vault" => InstructionType::WithdrawFromVault,
         "agent_withdrawal" => InstructionType::AgentWithdrawal,
+        "close_vault" => InstructionType::CloseVault,
         _ => {
             return ApiResponse::<()>::error(
                 StatusCode::BAD_REQUEST,
@@ -131,6 +147,29 @@ pub async fn execute_transaction(
 
             instructions.push(transfer(&agent_pubkey, &dest_pubkey, payload_amount));
             policy_req.program_ids.push(SYSTEM_PROGRAM_ID.to_string());
+        }
+
+        InstructionType::CloseVault => {
+            let accounts = CloseVault {
+                vault: to_anchor(vault_pda),
+                agent: to_anchor(agent_pubkey),
+                system_program: anchor_lang::solana_program::system_program::ID,
+            };
+
+            instructions.push(Instruction {
+                program_id,
+                accounts: accounts
+                    .to_account_metas(Some(false))
+                    .into_iter()
+                    .map(|a| AccountMeta {
+                        pubkey: Pubkey::new_from_array(a.pubkey.to_bytes()),
+                        is_signer: a.is_signer,
+                        is_writable: a.is_writable,
+                    })
+                    .collect(),
+                data: CloseInst {}.data(),
+            });
+            policy_req.program_ids.push(program_id.to_string());
         }
 
         InstructionType::InitializeVault => {
@@ -327,7 +366,7 @@ pub async fn execute_transaction(
 
     let usd_value = state.price_feed.lamports_to_usd(payload_amount).await;
     write_audit_entry(
-        state,
+        state.clone(),
         agent.id,
         policy_req.instruction_type,
         "confirmed".to_string(),
@@ -336,6 +375,14 @@ pub async fn execute_transaction(
         usd_value,
     )
     .await;
+
+    let _ = state.event_tx.send(ServerEvent::TransactionExecuted {
+        signature: tx_sig.to_string(),
+        agent_id: agent_id.clone(),
+    });
+    let _ = state.event_tx.send(ServerEvent::BalanceUpdated {
+        agent_id: agent_id.clone(),
+    });
 
     ApiResponse::success(
         GatewayResponse {

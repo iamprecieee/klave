@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+pub const SYSTEM_PROGRAM_ID: &str = "11111111111111111111111111111111";
+pub const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+pub const TREASURY_PROGRAM_ID: &str = "H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex";
+pub const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
     pub id: String,
@@ -8,6 +13,7 @@ pub struct Agent {
     pub is_active: bool,
     pub created_at: i64,
     pub policy_id: String,
+    pub api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +60,15 @@ fn default_max_lamports() -> i64 {
 
 fn default_slippage_bps() -> i32 {
     50 // 0.5%
+}
+
+pub fn default_programs() -> Vec<String> {
+    vec![
+        SYSTEM_PROGRAM_ID.to_string(),
+        TOKEN_PROGRAM_ID.to_string(),
+        TREASURY_PROGRAM_ID.to_string(),
+        ORCA_WHIRLPOOL_PROGRAM_ID.to_string(),
+    ]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

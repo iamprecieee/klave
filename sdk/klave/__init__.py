@@ -13,6 +13,8 @@ from klave.models import (
     CreateAgentRequest,
     OrcaSwapRequest,
     TxResult,
+    SYSTEM_PROGRAM_ID,
+    TREASURY_PROGRAM_ID,
 )
 
 __all__ = [
@@ -28,4 +30,6 @@ __all__ = [
     "CreateAgentRequest",
     "OrcaSwapRequest",
     "TxResult",
+    "SYSTEM_PROGRAM_ID",
+    "TREASURY_PROGRAM_ID",
 ]

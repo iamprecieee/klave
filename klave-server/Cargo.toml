@@ -17,7 +17,7 @@ serde_json = { workspace = true }
 solana-client = { workspace = true }
 solana-keychain = { workspace = true }
 solana-sdk = { workspace = true }
-solana-system-interface = { workspace= true }
+solana-system-interface = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
@@ -25,7 +25,11 @@ uuid = { workspace = true }
 anchor-lang = "0.32.1"
 anyhow = "1.0.98"
 axum = "0.8.8"
+futures-util = "0.3.32"
+subtle = "2.6.1"
+tokio-stream = { version = "0.1.18", features = ["sync"] }
 tower = { version = "0.5.3", features = ["util"] }
+tower_governor = "0.8.0"
 tower-http = { version = "0.6.6", features = ["cors", "trace"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 

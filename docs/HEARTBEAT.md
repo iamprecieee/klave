@@ -98,7 +98,7 @@ Your agent's policy must include the programs needed for each action:
 | Action           | Required `allowed_programs`                                                        |
 | ---------------- | ---------------------------------------------------------------------------------- |
 | SOL transfers    | `11111111111111111111111111111111`                                                 |
-| Vault operations | `11111111111111111111111111111111`, `GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx` |
+| Vault operations | `11111111111111111111111111111111`, `H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex` |
 | Token swaps      | `11111111111111111111111111111111`, `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc`  |
 
 ## Error Handling

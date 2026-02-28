@@ -1,9 +1,13 @@
 use chrono::Utc;
+use rand::distr::{Alphanumeric, SampleString};
+use sha2::{Digest, Sha256};
 use solana_sdk::signature::{Keypair, Signer};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-use crate::agent::model::{Agent, AgentPolicy, AgentPolicyInput, CreateAgentRequest};
+use crate::agent::model::{
+    Agent, AgentPolicy, AgentPolicyInput, CreateAgentRequest, default_programs,
+};
 use crate::crypto;
 use crate::error::KlaveError;
 
@@ -20,23 +24,52 @@ impl AgentRepository {
         }
     }
 
+    fn generate_api_key() -> String {
+        Alphanumeric.sample_string(&mut rand::rng(), 32)
+    }
+
+    fn hash_api_key(key: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(key.as_bytes());
+        format!("{:x}", hasher.finalize())
+    }
+
     pub async fn create(&self, req: &CreateAgentRequest) -> Result<Agent, KlaveError> {
         let agent_id = Uuid::new_v4().to_string();
         let policy_id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp();
 
+        let api_key = Self::generate_api_key();
+        let api_key_hash = Self::hash_api_key(&api_key);
+        let encrypted_api_key = crypto::encrypt(api_key.as_bytes(), &self.encryption_key)?;
+
         let keypair = Keypair::new();
         let pubkey = keypair.pubkey().to_string();
         let encrypted_keypair = crypto::encrypt(&keypair.to_bytes(), &self.encryption_key)?;
 
-        let allowed_programs_json = serde_json::to_string(&req.policy.allowed_programs)?;
+        let mut allowed_programs = req.policy.allowed_programs.clone();
+        if allowed_programs.is_empty() {
+            allowed_programs = default_programs();
+        }
+
+        let mut daily_spend_limit_usd = req.policy.daily_spend_limit_usd;
+        if daily_spend_limit_usd == 0.0 {
+            daily_spend_limit_usd = 100.0;
+        }
+
+        let mut daily_swap_volume_usd = req.policy.daily_swap_volume_usd;
+        if daily_swap_volume_usd == 0.0 {
+            daily_swap_volume_usd = 500.0;
+        }
+
+        let allowed_programs_json = serde_json::to_string(&allowed_programs)?;
         let token_allowlist_json = serde_json::to_string(&req.policy.token_allowlist)?;
         let withdrawal_destinations_json =
             serde_json::to_string(&req.policy.withdrawal_destinations)?;
 
         sqlx::query(
-            "INSERT INTO agents (id, pubkey, label, is_active, created_at, policy_id, encrypted_keypair) \
-             VALUES (?, ?, ?, 1, ?, ?, ?)",
+            "INSERT INTO agents (id, pubkey, label, is_active, created_at, policy_id, encrypted_keypair, api_key_hash, encrypted_api_key) \
+             VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)",
         )
         .bind(&agent_id)
         .bind(&pubkey)
@@ -44,6 +77,8 @@ impl AgentRepository {
         .bind(now)
         .bind(&policy_id)
         .bind(&encrypted_keypair)
+        .bind(&api_key_hash)
+        .bind(&encrypted_api_key)
         .execute(&self.pool)
         .await?;
 
@@ -59,8 +94,8 @@ impl AgentRepository {
         .bind(&allowed_programs_json)
         .bind(req.policy.max_lamports_per_tx)
         .bind(&token_allowlist_json)
-        .bind(req.policy.daily_spend_limit_usd)
-        .bind(req.policy.daily_swap_volume_usd)
+        .bind(daily_spend_limit_usd)
+        .bind(daily_swap_volume_usd)
         .bind(req.policy.slippage_bps)
         .bind(&withdrawal_destinations_json)
         .bind(now)
@@ -74,6 +109,7 @@ impl AgentRepository {
             is_active: true,
             created_at: now,
             policy_id,
+            api_key: Some(api_key),
         })
     }
 
@@ -179,6 +215,34 @@ impl AgentRepository {
             None => Err(KlaveError::AgentNotFound(id.to_string())),
         }
     }
+
+    pub async fn verify_agent_key(
+        &self,
+        agent_id: &str,
+        api_key: &str,
+    ) -> Result<bool, KlaveError> {
+        let hash = Self::hash_api_key(api_key);
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT id FROM agents WHERE id = ? AND api_key_hash = ?")
+                .bind(agent_id)
+                .bind(hash)
+                .fetch_optional(&self.pool)
+                .await?;
+
+        Ok(row.is_some())
+    }
+
+    pub async fn find_by_key_hash(&self, api_key: &str) -> Result<Option<Agent>, KlaveError> {
+        let hash = Self::hash_api_key(api_key);
+        let row = sqlx::query_as::<_, AgentRow>(
+            "SELECT id, pubkey, label, is_active, created_at, policy_id FROM agents WHERE api_key_hash = ?",
+        )
+        .bind(hash)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(AgentRow::into_agent))
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -200,6 +264,7 @@ impl AgentRow {
             is_active: self.is_active,
             created_at: self.created_at,
             policy_id: self.policy_id,
+            api_key: None, // API key should not be retrieved from DB in plain text
         }
     }
 }

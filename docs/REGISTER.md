@@ -13,21 +13,19 @@ mkdir -p "$STATE_DIR"
 
 ## Step 2: Register via API
 
-Choose a unique label for your agent and register.
-Register with only these policies:
+Choose a unique label for your agent and register. By default, KLAVE provides **Defaults** (automatically whitelisting essential programs like System, Treasury, and Orca, and setting reasonable spend limits).
 
-Choose a unique label for your agent and register with a comprehensive policy to enable all standard actions:
+If you want full control, provide a policy in the registration request:
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/agents \
-  -H "X-API-Key: YOUR_OPERATOR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "label": "agent-007",
     "policy": {
       "allowed_programs": [
         "11111111111111111111111111111111",
-        "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx",
+        "H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex",
         "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
       ],
       "token_allowlist": [
@@ -44,12 +42,10 @@ curl -X POST http://localhost:3000/api/v1/agents \
 
 ## Step 3: Save Credentials
 
-Save the response data to `$STATE_DIR/credentials.json`. It will contain your `agent_id` and **`pubkey`**.
+Save the response data to `$STATE_DIR/credentials.json`. It will contain your `agent_id`, `pubkey`, and most importantly, your **`api_key`**.
 
-## Step 4: Funding (Manual)
-
-**CRITICAL**: Your wallet starts with 0 SOL. You CANNOT execute transactions until you are funded.
-Provide your `pubkey` to your operator. They will fund you via:
+> [!CAUTION]
+> Your `api_key` is only returned once. Keep it secret and secure.
 
 ```bash
 solana airdrop 2 YOUR_PUBKEY --url devnet
@@ -57,10 +53,9 @@ solana airdrop 2 YOUR_PUBKEY --url devnet
 
 or manually.
 
-## Step 5: Verification
-
-Verify your agent is active and funded:
+Verify your agent is active and funded using your new agent API key:
 
 ```bash
-curl http://localhost:3000/api/v1/agents/YOUR_AGENT_ID/balance
+curl http://localhost:3000/api/v1/agents/YOUR_AGENT_ID/balance \
+  -H "X-API-Key: YOUR_AGENT_API_KEY"
 ```

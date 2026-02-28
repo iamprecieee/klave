@@ -61,7 +61,7 @@ cargo install --path ./klave-cli
 # 3. Initialize — generates .env with all secrets (JUPITER_API_KEY and LLM keys (optional) should be set manually)
 klave init
 
-# 4. Deploy the treasury program to devnet
+# 4. Deploy the treasury program to devnet (optional)
 klave deploy
 
 # 5. Fund the Kora fee-payer (devnet). If CLI airdrop fails, use https://faucet.solana.com/ with the pubkey printed below:
@@ -71,6 +71,15 @@ solana airdrop 2 $(grep KORA_PUBKEY .env | cut -d= -f2) --url devnet
 klave start --with-kora --dashboard
 ```
 
+[!IMPORTANT]
+The Treasury Program ID `H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex` is hardcoded in several critical locations for security whitelisting. If you re-deploy to a different ID, you **must** update it in:
+
+- **On-chain**: `klave-anchor/programs/klave-anchor/src/lib.rs` and `klave-anchor/Anchor.toml`
+- **Server**: `klave-core/src/agent/model.rs` (the `TREASURY_PROGRAM_ID` constant)
+- **SDK/Demo**: `sdk/klave/models.py`
+- **Relayer**: `kora.example.toml` (if using Kora)
+- **Docs**: `SKILLS.md`, `REGISTER.md`, and `HEARTBEAT.md` (to keep agent context accurate)
+
 The server is now running:
 
 | Service          | URL                   |
@@ -79,11 +88,9 @@ The server is now running:
 | **Kora relayer** | http://localhost:8080 |
 | **Dashboard**    | http://localhost:8888 |
 
-> [!IMPORTANT]
-> **API Keys:** `klave init` generates two keys in `.env`:
->
-> - `KLAVE_API_KEY`: Used by agents for transactions and state queries.
-> - `KLAVE_OPERATOR_API_KEY`: Used by humans/operators for administrative tasks (agent creation, policy updates).
+> - `KLAVE_OPERATOR_API_KEY`: Used by humans/operators for administrative tasks (policy updates, deactivation).
+> - **Public Registration**: Agents can register themselves via `POST /api/v1/agents` without an initial API key.
+> - **Agent API Keys**: Unique keys generated per-agent during creation. Used for all agent-specific operations.
 
 > [!WARNING]
 > **Airdrop failures:** Solana Devnet airdrops via CLI are rate-limited and often fail.
@@ -102,12 +109,13 @@ The demo runs an autonomous agent following the [HEARTBEAT.md](HEARTBEAT.md) pla
 cd sdk
 uv venv
 source .venv/bin/activate
-uv pip install -e "./sdk[langchain]"
+uv pip install -e ".[langchain]"
+cd ..
 
 # 2. Run the autonomous heartbeat cycle
-# The demo uses Both keys to handle initial setup (Operator) and runtime (Agent)
+# Registration is public; the agent registers itself if no key is provided.
+# The Operator Key is used to initially fund the agent and sync its policy.
 uv run --active klave-sdk-demo \
-    --api-key $(grep KLAVE_API_KEY .env | cut -d= -f2) \
     --operator-key $(grep KLAVE_OPERATOR_API_KEY .env | cut -d= -f2)
 ```
 
@@ -207,12 +215,13 @@ async with KlaveClient("http://localhost:3000", api_key="your-key") as client:
 
 ```python
 from klave import KlaveClient
-from klave.tools import build_tools
+from klave.tools import build_agent_tools
 
 client = KlaveClient("http://localhost:3000", api_key="your-key")
-tools = build_tools(client)
+tools = build_agent_tools(client)
 # Pass `tools` to your LangChain agent — it can autonomously call
-# create_agent, get_balance, transfer_sol, swap_tokens, etc.
+# create_agent, get_balance, transfer_sol, swap_tokens using only
+# the safe agent-level toolset.
 ```
 
 ---
@@ -225,8 +234,8 @@ All `/api/v1` endpoints require the `X-API-Key` header. Full reference with requ
 
 | Method   | Endpoint                      | Description              | Key Type |
 | -------- | ----------------------------- | ------------------------ | -------- |
-| `POST`   | `/api/v1/agents`              | Create agent with policy | Agent    |
-| `GET`    | `/api/v1/agents`              | List all agents          | Agent    |
+| `POST`   | `/api/v1/agents`              | Create agent with policy | Public   |
+| `GET`    | `/api/v1/agents`              | List all agents          | Operator |
 | `DELETE` | `/api/v1/agents/{id}`         | Deactivate agent         | Operator |
 | `GET`    | `/api/v1/agents/{id}/balance` | SOL + vault balance      | Agent    |
 | `GET`    | `/api/v1/agents/{id}/tokens`  | SPL token balances       | Agent    |
@@ -281,7 +290,7 @@ All configuration lives in `.env`. Run `klave init` to auto-generate secrets.
 | Problem                             | Solution                                                                                                                                                                                                                                 |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `solana airdrop` fails              | Use [faucet.solana.com](https://faucet.solana.com/) instead — CLI airdrops are heavily rate-limited                                                                                                                                      |
-| `ProgramNotAllowed` on transactions | Add the required program IDs to the agent's `allowed_programs` policy. System Program: `11111111111111111111111111111111`, Treasury: `GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx`, Orca: `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc` |
+| `ProgramNotAllowed` on transactions | Add the required program IDs to the agent's `allowed_programs` policy. System Program: `11111111111111111111111111111111`, Treasury: `H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex`, Orca: `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc` |
 | `No .env found`                     | Run `klave init` first                                                                                                                                                                                                                   |
 | Vault operations fail               | Run `klave deploy` to deploy the treasury program to devnet before using vault features                                                                                                                                                  |
 | Kora offline                        | Ensure `klave start --with-kora` was used. Check `kora.log` for errors. The Kora fee-payer needs SOL for gas.                                                                                                                            |

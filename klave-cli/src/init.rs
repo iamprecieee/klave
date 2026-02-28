@@ -1,6 +1,7 @@
 use std::fs;
 
 use rand::random;
+use solana_sdk::signer::Signer;
 
 use crate::ui;
 use crate::utils::{project_root, set_key};
@@ -43,10 +44,11 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     ui::flow_step("Identity cryptography");
     {
-        use solana_sdk::signer::Signer;
         let keypair = solana_sdk::signer::keypair::Keypair::new();
+
         set_key(&mut lines, "KORA_PRIVATE_KEY=", &keypair.to_base58_string());
         set_key(&mut lines, "KORA_PUBKEY=", &keypair.pubkey().to_string());
+
         ui::flow_line(&format!(
             "Generated {} gateway credentials",
             ui::info("KORA")
@@ -58,26 +60,28 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     ui::flow_blank();
-
     ui::flow_step("Secrets hardening");
 
     let enc_key = random_hex(32);
+
     set_key(&mut lines, "KLAVE_ENCRYPTION_KEY=", &enc_key);
+
     ui::flow_line(&format!("Locked {}", ui::brand("KLAVE_ENCRYPTION_KEY")));
 
-    let api_key = random_hex(16);
-    set_key(&mut lines, "KLAVE_API_KEY=", &api_key);
-    ui::flow_line(&format!("Locked {}", ui::brand("KLAVE_API_KEY")));
-
     let operator_key = random_hex(16);
+
     set_key(&mut lines, "KLAVE_OPERATOR_API_KEY=", &operator_key);
+
     ui::flow_line(&format!("Locked {}", ui::brand("KLAVE_OPERATOR_API_KEY")));
 
     let kora_key = random_hex(16);
+
     set_key(&mut lines, "KORA_API_KEY=", &kora_key);
+
     ui::flow_line(&format!("Locked {}", ui::brand("KORA_API_KEY")));
 
     let content = lines.join("\n");
+
     fs::write(&env_path, &content)?;
 
     ui::flow_blank();
@@ -85,6 +89,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         "Provisioning complete. Next: {}",
         ui::info("klave start")
     ));
+
     println!();
 
     Ok(())

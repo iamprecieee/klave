@@ -13,14 +13,11 @@ pub fn run(cluster: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     ui::flow_start("deploy");
     ui::flow_blank();
-
     ui::flow_box(
         "Target",
         &[("cluster", cluster), ("program", "klave-anchor")],
     );
-
     ui::flow_blank();
-
     ui::flow_step("Compiling Anchor program...");
 
     let build_status = Command::new("anchor")
@@ -33,10 +30,9 @@ pub fn run(cluster: &str) -> Result<(), Box<dyn std::error::Error>> {
     if !build_status.success() {
         return Err("Anchor compilation reported critical errors.".into());
     }
+
     ui::flow_done("Bytecode finalized");
-
     ui::flow_blank();
-
     ui::flow_step(&format!("Migrating to {}...", ui::info(cluster)));
 
     let deploy_status = Command::new("anchor")
@@ -49,14 +45,15 @@ pub fn run(cluster: &str) -> Result<(), Box<dyn std::error::Error>> {
     if !deploy_status.success() {
         return Err("Program migration rejected by the cluster.".into());
     }
-    ui::flow_done("Program deployed");
 
+    ui::flow_done("Program deployed");
     ui::flow_blank();
     ui::flow_end(&format!(
         "Treasury {} on {}.",
         ui::brand("live"),
         ui::info(cluster)
     ));
+
     println!();
 
     Ok(())

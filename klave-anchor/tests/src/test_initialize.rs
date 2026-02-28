@@ -14,7 +14,7 @@ use std::str::FromStr;
 
 #[test]
 fn test_treasury_flow() {
-    let program_id = "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx";
+    let program_id = "H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex";
     let anchor_wallet = std::env::var("ANCHOR_WALLET").unwrap_or_else(|_| {
         let home = std::env::var("HOME").expect("HOME not set");
         format!("{home}/.config/solana/id.json")

@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{transfer, Transfer};
 
-declare_id!("GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx");
+declare_id!("H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex");
 
 #[account]
 pub struct AgentVault {
@@ -44,6 +44,23 @@ pub struct VaultOperation<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct CloseVault<'info> {
+    #[account(
+        mut,
+        close = agent,
+        seeds = [b"vault", agent.key().as_ref()],
+        bump = vault.bump,
+        has_one = agent
+    )]
+    pub vault: Account<'info, AgentVault>,
+
+    #[account(mut)]
+    pub agent: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
 #[program]
 pub mod klave_anchor {
     use super::*;
@@ -70,9 +87,33 @@ pub mod klave_anchor {
         let vault_info = ctx.accounts.vault.to_account_info();
         let agent_info = ctx.accounts.agent.to_account_info();
 
+        let rent = Rent::get()?;
+        let min_rent = rent.minimum_balance(vault_info.data_len());
+
+        if vault_info.lamports() < amount {
+            return err!(VaultError::InsufficientFunds);
+        }
+
+        if vault_info.lamports() - amount < min_rent {
+            return err!(VaultError::BelowRentExemptionThreshold);
+        }
+
         **vault_info.try_borrow_mut_lamports()? -= amount;
         **agent_info.try_borrow_mut_lamports()? += amount;
 
         Ok(())
     }
+
+    pub fn close_vault(_ctx: Context<CloseVault>) -> Result<()> {
+        // Rent is automatically recovered to the agent via the `close = agent` attribute
+        Ok(())
+    }
+}
+
+#[error_code]
+pub enum VaultError {
+    #[msg("Insufficient funds in vault")]
+    InsufficientFunds,
+    #[msg("Withdrawal would leave vault below rent-exemption threshold")]
+    BelowRentExemptionThreshold,
 }

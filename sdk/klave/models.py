@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
+TREASURY_PROGRAM_ID = "H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex"
+SYSTEM_PROGRAM_ID = "11111111111111111111111111111111"
+
 
 class AgentPolicyInput(BaseModel):
     """Mutable input for creating/updating an agent's policy."""
@@ -37,6 +40,7 @@ class Agent(BaseModel):
     is_active: bool
     created_at: int
     policy_id: str
+    api_key: str | None = None
 
 
 class AgentBalance(BaseModel):

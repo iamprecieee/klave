@@ -1,15 +1,19 @@
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use solana_sdk::pubkey::Pubkey;
 use tracing::{error, info};
+use uuid::Uuid;
 
-use klave_core::agent::model::{AgentBalance, AgentPolicyInput, CreateAgentRequest};
+use klave_core::{
+    agent::model::{AgentBalance, AgentPolicyInput, CreateAgentRequest},
+    error::KlaveError,
+};
 
-use crate::{response::ApiResponse, state::AppState};
+use crate::{event::ServerEvent, middleware::AuthContext, response::ApiResponse, state::AppState};
 
 pub async fn create_agent(
     State(state): State<AppState>,
@@ -22,7 +26,11 @@ pub async fn create_agent(
 
     match state.agent_repo.create(&body).await {
         Ok(agent) => {
-            info!(agent_id = %agent.id, pubkey = %agent.pubkey, "agent created");
+            let _ = state.event_tx.send(ServerEvent::AgentCreated {
+                id: agent.id.clone(),
+                label: agent.label.clone(),
+            });
+
             match serde_json::to_value(&agent) {
                 Ok(val) => ApiResponse::created(val, "agent created").into_response(),
                 Err(e) => {
@@ -39,28 +47,60 @@ pub async fn create_agent(
     }
 }
 
-pub async fn list_agents(State(state): State<AppState>) -> Response {
-    match state.agent_repo.list_all().await {
-        Ok(agents) => match serde_json::to_value(&agents) {
-            Ok(val) => ApiResponse::success(val, "agents retrieved").into_response(),
-            Err(e) => ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-                .into_response(),
-        },
-        Err(e) => {
-            error!(error = %e, "failed to list agents");
-            ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-                .into_response()
+pub async fn list_agents(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> Response {
+    if auth.is_operator {
+        match state.agent_repo.list_all().await {
+            Ok(agents) => match serde_json::to_value(&agents) {
+                Ok(val) => ApiResponse::success(val, "agents retrieved").into_response(),
+                Err(e) => {
+                    ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                        .into_response()
+                }
+            },
+            Err(e) => {
+                error!(error = %e, "failed to list agents");
+                ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                    .into_response()
+            }
         }
+    } else if let Some(agent_id) = auth.agent_id {
+        match state.agent_repo.find_by_id(&agent_id).await {
+            Ok(Some(agent)) => match serde_json::to_value(&vec![agent]) {
+                Ok(val) => ApiResponse::success(val, "agent retrieved").into_response(),
+                Err(e) => {
+                    ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                        .into_response()
+                }
+            },
+            _ => ApiResponse::<()>::error(StatusCode::NOT_FOUND, "Agent not found").into_response(),
+        }
+    } else {
+        ApiResponse::<()>::error(StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
     }
 }
 
-pub async fn deactivate_agent(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+pub async fn deactivate_agent(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<String>,
+) -> Response {
+    if !auth.is_operator && auth.agent_id.as_deref() != Some(&id) {
+        return ApiResponse::<()>::error(StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    if Uuid::parse_str(&id).is_err() {
+        return ApiResponse::<()>::error(StatusCode::BAD_REQUEST, "Invalid Agent ID format")
+            .into_response();
+    }
     match state.agent_repo.deactivate(&id).await {
         Ok(()) => {
             info!(agent_id = %id, "agent deactivated");
             ApiResponse::<()>::no_content("agent deactivated").into_response()
         }
-        Err(klave_core::error::KlaveError::AgentNotFound(_)) => {
+        Err(KlaveError::AgentNotFound(_)) => {
             ApiResponse::<()>::error(StatusCode::NOT_FOUND, format!("agent not found: {id}"))
                 .into_response()
         }
@@ -72,7 +112,19 @@ pub async fn deactivate_agent(State(state): State<AppState>, Path(id): Path<Stri
     }
 }
 
-pub async fn get_agent_history(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+pub async fn get_agent_history(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<String>,
+) -> Response {
+    if !auth.is_operator && auth.agent_id.as_deref() != Some(&id) {
+        return ApiResponse::<()>::error(StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    if Uuid::parse_str(&id).is_err() {
+        return ApiResponse::<()>::error(StatusCode::BAD_REQUEST, "Invalid Agent ID format")
+            .into_response();
+    }
     let agent = match state.agent_repo.find_by_id(&id).await {
         Ok(Some(a)) => a,
         Ok(None) => {
@@ -103,7 +155,19 @@ pub async fn get_agent_history(State(state): State<AppState>, Path(id): Path<Str
     }
 }
 
-pub async fn get_agent_balance(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+pub async fn get_agent_balance(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<String>,
+) -> Response {
+    if !auth.is_operator && auth.agent_id.as_deref() != Some(&id) {
+        return ApiResponse::<()>::error(StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    if Uuid::parse_str(&id).is_err() {
+        return ApiResponse::<()>::error(StatusCode::BAD_REQUEST, "Invalid Agent ID format")
+            .into_response();
+    }
     let agent = match state.agent_repo.find_by_id(&id).await {
         Ok(Some(a)) => a,
         Ok(None) => {
@@ -163,9 +227,18 @@ pub async fn get_agent_balance(State(state): State<AppState>, Path(id): Path<Str
 
 pub async fn update_policy(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
     Json(body): Json<AgentPolicyInput>,
 ) -> Response {
+    if !auth.is_operator && auth.agent_id.as_deref() != Some(&id) {
+        return ApiResponse::<()>::error(StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    if Uuid::parse_str(&id).is_err() {
+        return ApiResponse::<()>::error(StatusCode::BAD_REQUEST, "Invalid Agent ID format")
+            .into_response();
+    }
     match state.agent_repo.find_by_id(&id).await {
         Ok(Some(agent)) => {
             if !agent.is_active {
@@ -211,8 +284,17 @@ pub async fn update_policy(
 
 pub async fn get_agent_token_balances(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> Response {
+    if !auth.is_operator && auth.agent_id.as_deref() != Some(&id) {
+        return ApiResponse::<()>::error(StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    if Uuid::parse_str(&id).is_err() {
+        return ApiResponse::<()>::error(StatusCode::BAD_REQUEST, "Invalid Agent ID format")
+            .into_response();
+    }
     let agent = match state.agent_repo.find_by_id(&id).await {
         Ok(Some(a)) => a,
         Ok(None) => {

@@ -27,7 +27,7 @@ allowed_programs = [
     "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",  # Memo
     "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",  # Orca Whirlpool (Mainnet/Devnet)
     "9W959DqEETiGZocYWCQPaS2U113wGZpT2NMC9Esh1xM6", # Orca Token Swap
-    "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx", # Orca Whirlpool (Devnet Alternative)
+    "H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex", # Orca Whirlpool (Devnet Alternative)
 ]
 
 allowed_tokens = [

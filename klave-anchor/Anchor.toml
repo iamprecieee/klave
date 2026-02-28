@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-klave_anchor = "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx"
+klave_anchor = "H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex"
 
 [programs.devnet]
-klave_anchor = "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx"
+klave_anchor = "H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex"
 
 [registry]
 url = "https://api.apr.dev"

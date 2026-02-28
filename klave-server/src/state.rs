@@ -6,8 +6,9 @@ use klave_core::{
     price::PriceFeed,
     solana::{gateway::KoraGateway, orca::OrcaClient},
 };
+use tokio::sync::broadcast;
 
-use crate::config::Config;
+use crate::{config::Config, event::ServerEvent};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -18,4 +19,5 @@ pub struct AppState {
     pub kora_gateway: Arc<KoraGateway>,
     pub orca_client: Arc<OrcaClient>,
     pub price_feed: Arc<PriceFeed>,
+    pub event_tx: broadcast::Sender<ServerEvent>,
 }

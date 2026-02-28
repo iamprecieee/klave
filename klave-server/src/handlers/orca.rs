@@ -1,5 +1,5 @@
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Path, Query, State},
     http::StatusCode,
 };
@@ -7,8 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use uuid::Uuid;
 
-use klave_core::policy::engine::{InstructionType, PolicyEngine};
-use klave_core::{agent::model::SwapQuote, audit::store::NewAuditEntry};
+use klave_core::{
+    policy::engine::{InstructionType, PolicyEngine},
+    {agent::model::SwapQuote, audit::store::NewAuditEntry},
+};
 use orca_whirlpools::SwapType;
 use solana_keychain::SolanaSigner;
 use solana_sdk::{
@@ -18,7 +20,7 @@ use solana_sdk::{
     transaction::{Transaction, VersionedTransaction},
 };
 
-use crate::{response::ApiResponse, state::AppState};
+use crate::{middleware::AuthContext, response::ApiResponse, state::AppState};
 
 #[derive(Debug, Deserialize)]
 pub struct OrcaSwapRequest {
@@ -42,9 +44,14 @@ pub struct PoolsQuery {
 
 pub async fn execute_swap(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
     Json(payload): Json<OrcaSwapRequest>,
 ) -> ApiResponse<OrcaSwapResponse> {
+    if !auth.is_operator && auth.agent_id.as_deref() != Some(&id) {
+        return ApiResponse::error(StatusCode::FORBIDDEN, "Forbidden");
+    }
+
     let agent_id = match Uuid::from_str(&id) {
         Ok(uuid) => uuid.to_string(),
         Err(_) => return ApiResponse::error(StatusCode::BAD_REQUEST, "invalid agent id format"),
@@ -242,9 +249,14 @@ pub async fn execute_swap(
 
 pub async fn get_swap_quote(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
     Json(payload): Json<OrcaSwapRequest>,
 ) -> ApiResponse<SwapQuote> {
+    if !auth.is_operator && auth.agent_id.as_deref() != Some(&id) {
+        return ApiResponse::error(StatusCode::FORBIDDEN, "Forbidden");
+    }
+
     let whirlpool = match Pubkey::from_str(&payload.whirlpool) {
         Ok(p) => p,
         Err(_) => return ApiResponse::error(StatusCode::BAD_REQUEST, "invalid whirlpool address"),

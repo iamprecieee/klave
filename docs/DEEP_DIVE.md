@@ -135,12 +135,13 @@ async with KlaveClient("http://localhost:3000", api_key="key") as c:
 **2. LangChain tools (LLM-driven):**
 
 ```python
-from klave.tools import build_tools
+from klave.tools import build_agent_tools
 
 client = KlaveClient("http://localhost:3000", api_key="key")
-tools = build_tools(client)
+tools = build_agent_tools(client)
 # Pass `tools` to a LangChain agent — it can autonomously call
 # create_agent, get_balance, transfer_sol, swap_tokens, etc.
+# but DOES NOT have access to administrative tools.
 ```
 
 **3. Autonomous loop (hybrid):**
@@ -170,8 +171,8 @@ while True:
 ### Authentication & Authorization
 
 - **Dual API Key Model**:
-  - `KLAVE_OPERATOR_API_KEY`: Required for administrative operations (creating agents, deactivating, updating policies).
-  - `KLAVE_API_KEY`: Used by agents for runtime operations (transactions, balance checks, history).
+  - `KLAVE_OPERATOR_API_KEY`: Required for administrative operations (creating agents, deactivating, updating policies). The Python SDK exposes these via `build_operator_tools`.
+  - `KLAVE_API_KEY`: Used by agents for runtime operations (transactions, balance checks, history). The Python SDK provides a restricted `build_agent_tools` set for this.
 - **Per-agent isolation**: An agent's keypair is loaded only when executing transactions for that specific agent.
 - **No cross-agent operations**: Agent A cannot sign with Agent B's key or access Agent B's vault.
 
@@ -237,23 +238,9 @@ The policy engine is a **synchronous, stateless evaluator** written in Rust. It 
 - `SlippageExceeded` — requested slippage above policy limit
 - `WithdrawalDestinationNotAllowed` — destination not in whitelist
 
-### Evaluation Flow
+### Defaults
 
-```
-TransactionRequest
-  │
-  ├─ is_active? ────────── NO ──> AgentInactive
-  ├─ program in allowlist? NO ──> ProgramNotAllowed
-  ├─ amount ≤ max?  ────── NO ──> ExceedsMaxLamports
-  ├─ mint in allowlist? ── NO ──> TokenNotAllowed
-  ├─ daily spend ok? ───── NO ──> DailySpendExceeded
-  ├─ slippage ok? ──────── NO ──> SlippageExceeded
-  ├─ destination ok? ───── NO ──> WithdrawalDestinationNotAllowed
-  │
-  └─ All checks pass ─────────> ALLOW
-```
-
-Empty allowlists (programs, tokens, destinations) are treated as **unrestricted**. Setting a limit to `0` disables that limit (unlimited). This is intentional: default policies are permissive, and operators tighten them per agent.
+To ensure a seamless developer experience, KLAVE provides **Defaults** during agent creation. If no policy is provided, KLAVE automatically whitelists the System Program, Treasury Program, Token Program, and Orca Whirlpool Program, and sets a $100 daily spend limit and $500 daily swap volume limit. This prevents immediate "Policy Violation" errors for basic operations.
 
 ---
 

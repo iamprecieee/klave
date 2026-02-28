@@ -29,11 +29,22 @@ impl<T: Serialize> ApiResponse<T> {
         }
     }
     pub fn error(status: StatusCode, message: impl Into<String>) -> Self {
-        Self {
-            success: false,
-            message: message.into(),
-            data: None,
-            status_code: status.as_u16(),
+        let msg = message.into();
+        if status == StatusCode::INTERNAL_SERVER_ERROR {
+            tracing::error!(internal_error = %msg, "Internal server error occurred");
+            Self {
+                success: false,
+                message: "Internal Server Error".to_string(),
+                data: None,
+                status_code: status.as_u16(),
+            }
+        } else {
+            Self {
+                success: false,
+                message: msg,
+                data: None,
+                status_code: status.as_u16(),
+            }
         }
     }
 }

@@ -1,17 +1,17 @@
-use std::path::PathBuf;
+use std::{env, fs, path::PathBuf};
 
 pub fn project_root() -> PathBuf {
-    let mut dir = std::env::current_dir().expect("cannot read cwd");
+    let mut dir = env::current_dir().expect("cannot read cwd");
     loop {
         let candidate = dir.join("Cargo.toml");
         if candidate.exists() {
-            let content = std::fs::read_to_string(&candidate).unwrap_or_default();
+            let content = fs::read_to_string(&candidate).unwrap_or_default();
             if content.contains("[workspace]") {
                 return dir;
             }
         }
         if !dir.pop() {
-            return std::env::current_dir().expect("cannot read cwd");
+            return env::current_dir().expect("cannot read cwd");
         }
     }
 }

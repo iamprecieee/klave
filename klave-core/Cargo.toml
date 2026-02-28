@@ -24,6 +24,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
+sha2 = { workspace = true }
 
 aes-gcm = "0.10.3"
 anchor-client = "0.32.1"

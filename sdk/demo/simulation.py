@@ -1,5 +1,5 @@
 from .utils import flow_step, flow_line, flow_thought, flow_done, SOL_MINT, USDC_MINT
-from klave import AgentPolicyInput, KlaveClient, AgentBalance
+from klave import AgentPolicyInput, KlaveClient, AgentBalance, TREASURY_PROGRAM_ID, SYSTEM_PROGRAM_ID
 
 
 async def run_simulation(client: KlaveClient, agent_id: str) -> None:
@@ -80,7 +80,7 @@ async def _transfer_sol(client: KlaveClient, agent_id: str) -> None:
         agent_id,
         policy=AgentPolicyInput(
             withdrawal_destinations=[destination],
-            allowed_programs=["11111111111111111111111111111111"],
+            allowed_programs=[SYSTEM_PROGRAM_ID],
         ),
     )
 
@@ -97,8 +97,8 @@ async def _deposit_to_vault(
             agent_id,
             policy=AgentPolicyInput(
                 allowed_programs=[
-                    "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx",
-                    "11111111111111111111111111111111",
+                    TREASURY_PROGRAM_ID,
+                    SYSTEM_PROGRAM_ID,
                 ]
             ),
         )

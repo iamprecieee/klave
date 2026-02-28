@@ -32,10 +32,11 @@ You are interacting with KLAVE, an agentic wallet infrastructure server on Solan
 ## Connection
 
 - **Base URL**: `http://localhost:3000`
-- **Auth Header**: `X-API-Key: <KEY>` (required on all `/api/v1` endpoints)
+- **Auth Header**: `X-API-Key: <KEY>` (required on all agent-specific `/api/v1` endpoints)
 - **API Keys**:
-  - **Operator Key**: Required for administrative routes (`DELETE /agents/{id}`, `PUT /policy`)
-  - **Agent Key**: Required for runtime and creation routes (`POST /agents`, `GET /agents`, `POST /transactions`, etc.)
+  - **Operator Key**: Required for administrative routes (`DELETE /agents/{id}`, `PUT /policy`) and for listing agents (`GET /agents`). The Python SDK provides `build_operator_tools(client)` for this.
+  - **Agent Key**: Required for agent-specific runtime routes (`GET /agents/{id}/balance`, `POST /agents/{id}/transactions`, etc.). Each agent receives a unique key upon creation. The Python SDK provides `build_agent_tools(client)` which **only** includes these safe tools.
+  - **Public Routes**: `POST /api/v1/agents` (registration) and `GET /health` do not require an API key.
 - **Content-Type**: `application/json`
 
 All responses use a standard envelope:
@@ -72,6 +73,13 @@ All responses use a standard envelope:
 }
 ```
 
+> [!NOTE]
+> Policy fields are optional. If omitted (as below), KLAVE provides **Defaults**:
+>
+> - `allowed_programs`: whitelists System, Treasury, Token, and Orca programs automatically.
+> - `daily_spend_limit_usd`: $100.0
+> - `daily_swap_volume_usd`: $500.0
+
 **Response** `201`:
 
 ```json
@@ -81,9 +89,13 @@ All responses use a standard envelope:
   "label": "alpha-trader",
   "is_active": true,
   "created_at": 1700000000,
-  "policy_id": "uuid"
+  "policy_id": "uuid",
+  "api_key": "YOUR_UNIQUE_AGENT_API_KEY"
 }
 ```
+
+> [!IMPORTANT]
+> The `api_key` is returned **only once** during creation. If lost, the agent cannot be recovered and must be recreated. Save it to your credentials.
 
 After creation, the operator must fund the agent wallet externally:
 `solana airdrop 2 <pubkey> --url devnet` or manually send devnet SOL to the agent's `pubkey`.
@@ -92,7 +104,7 @@ After creation, the operator must fund the agent wallet externally:
 
 `GET /api/v1/agents`
 
-**Requires `KLAVE_OPERATOR_API_KEY`.** Agents cannot call this themselves.
+**Requires `KLAVE_OPERATOR_API_KEY`.**
 
 Returns an array of all agent objects.
 
@@ -378,7 +390,7 @@ Every agent has a policy that governs what it can do. The policy is set at creat
 | Program        | ID                                             | Needed for                      |
 | -------------- | ---------------------------------------------- | ------------------------------- |
 | System Program | `11111111111111111111111111111111`             | SOL transfers, vault operations |
-| Klave Treasury | `GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx` | Vault init, deposit, withdraw   |
+| Klave Treasury | `H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex` | Vault init, deposit, withdraw   |
 | Orca Whirlpool | `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc`  | Token swaps                     |
 
 ---

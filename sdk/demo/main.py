@@ -67,7 +67,7 @@ except ImportError as e:
     LANGCHAIN_AVAILABLE = False
 
 from klave import KlaveClient, AgentPolicyInput
-from klave.tools import build_tools
+from klave.tools import build_agent_tools, build_operator_tools
 
 from .utils import (
     flow_start,
@@ -97,10 +97,6 @@ async def entry():
     api_key = args.api_key or os.getenv("KLAVE_API_KEY")
     operator_key = args.operator_key or os.getenv("KLAVE_OPERATOR_API_KEY")
 
-    if not api_key:
-        print("Error: --api-key or KLAVE_API_KEY env var required")
-        sys.exit(1)
-
     flow_start("initialization")
 
     llm = None
@@ -120,59 +116,36 @@ async def entry():
     async with KlaveClient(
         args.base_url, api_key=api_key, operator_api_key=operator_key or ""
     ) as client:
-        flow_step("Configuring Agent...")
-        agents = await client.list_agents()
-        agent = next(
-            (agent for agent in agents if agent.label == "demo-agent-v1"), None
-        )
-
-        policy = AgentPolicyInput(  # Broad policy to support all demo actions
-            allowed_programs=[
-                "11111111111111111111111111111111",  # System
-                "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx",  # Treasury
-                "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",  # Orca
-            ],
-            token_allowlist=[SOL_MINT, USDC_MINT],
-            max_lamports_per_tx=1_000_000_000,
-            daily_spend_limit_usd=100.0,
-            daily_swap_volume_usd=500.0,
-            slippage_bps=50,
-            withdrawal_destinations=[],
-        )
-
-        if not agent:
-            agent = await client.create_agent("demo-agent-v1", policy)
-            flow_line(f"Created new agent: {_color(TEAL, '[NEW]')}")
-        else:
-            flow_line(f"Reusing existing agent: {_color(TEAL, '[ACTIVE]')}")
-            if operator_key:
-                await client.update_policy(agent.id, policy)
-                flow_line(f"Policy synchronized: {_color(TEAL, '[UPDATED]')}")
-
-        flow_done(f"Agent Ready: {_color(BLUE, agent.pubkey)}")
-
-        # ── Funding ──────────────────────────────────────────────────
-
-        balance = await client.get_balance(agent.id)
-        if balance.sol_lamports < 50000000:  # 0.05 SOL minimum is needed
-            flow_line(f"Send devnet SOL to: {_color(BLUE, agent.pubkey)}")
-            input(f"{_color(AMBER, '│')}  Press Enter once funded...")
-
-            await asyncio.sleep(2)
-
-            balance = await client.get_balance(agent.id)
-            flow_line(f"New Balance: {balance.sol_lamports} lamports")
-
         if LANGCHAIN_AVAILABLE and llm:
-            flow_step("Starting LLM Session")
-            tools = build_tools(client)
+            flow_step("LLM Agent Initializing...")
+            tools = build_agent_tools(client)
+
+            # Check if we have an agent already
+            existing_agent = None
+            if api_key or operator_key:
+                try:
+                    agents = await client.list_agents()
+                    existing_agent = next(
+                        (a for a in agents if a.label == "demo-agent-v1"), None
+                    )
+                except Exception:
+                    pass
+
+            agent_context = f"Your ID is {existing_agent.id if existing_agent else 'UNKNOWN'}.\n"
+            if existing_agent:
+                agent_context += f"Your Public Key is {existing_agent.pubkey}.\n"
 
             prompt = ChatPromptTemplate.from_messages(
                 [
                     (
                         "system",
-                        f"You are a fully autonomous KLAVE wallet agent. Your ID is {agent.id}.\n\n"
-                        "GOAL: Maintain your autonomous presence and financial health by following the HEARTBEAT playbook.\n\n"
+                        "You are a fully autonomous KLAVE wallet agent.\n\n"
+                        f"{agent_context}\n"
+                        "### INITIAL SETUP INSTRUCTIONS:\n"
+                        "1. If your ID is UNKNOWN, you MUST call `create_agent` with label 'demo-agent-v1' to register yourself first.\n"
+                        "2. After registration, if your SOL balance is 0, you MUST call `wait_for_manual_funding` to ask the user for funds.\n"
+                        "3. Once funded, proceed to your goal.\n\n"
+                        "### GOAL: Maintain your financial health by following the HEARTBEAT playbook.\n\n"
                         "### DECISION LOGIC (HEARTBEAT Playbook):\n"
                         f"{heartbeat_text}\n\n"
                         "### TECHNICAL REFERENCE (SKILLS API):\n"
@@ -181,9 +154,8 @@ async def entry():
                         "1. Analyze your current state (health, balance, tokens).\n"
                         "2. Compare against the decision flowchart in the HEARTBEAT playbook.\n"
                         "3. Execute ONLY the necessary actions to remain in optimal sync (deposit/withdraw/rebalance).\n"
-                        "4. If a tool returns an [ERROR] (e.g., 403 Policy Violation), ALERT the user to the missing requirement to FIX it immediately.\n"
-                        "5. ALWAYS conclude your cycle by calling `save_heartbeat` with the final state metrics.\n"
-                        "6. Conclude ONLY after you have reached a stable state according to the playbook.",
+                        "4. ALWAYS conclude your cycle by calling `save_heartbeat` with the final state metrics.\n"
+                        "5. Conclude ONLY after you have reached a stable state according to the playbook.",
                     ),
                     ("human", "{input}"),
                     MessagesPlaceholder(variable_name="agent_scratchpad"),
@@ -196,12 +168,12 @@ async def entry():
                     tools=tools,
                     verbose=False,
                     handle_parsing_errors=True,
-                    max_iterations=12,  # Increased to allow for multiple self-healing steps
+                    max_iterations=12, 
                 )
 
                 result = await executor.ainvoke(
                     {
-                        "input": "Perform your next heartbeat cycle based on the provided playbook."
+                        "input": "Initialize yourself if needed, then perform your heartbeat cycle."
                     },
                     {"callbacks": [FlowCallbackHandler()]},
                 )
@@ -211,8 +183,39 @@ async def entry():
 
             except Exception as e:
                 _status(f"LLM Error: {str(e)}", "err")
-                await run_simulation(client, agent.id)
+                # Attempt simulation fallback if we have an agent
+                if existing_agent:
+                    await run_simulation(client, existing_agent.id)
         else:
+            # Traditional simulation fallback
+            flow_step("Configuring Agent (Simulation)...")
+            agent = None
+            if api_key or operator_key:
+                try:
+                    agents = await client.list_agents()
+                    agent = next((a for a in agents if a.label == "demo-agent-v1"), None)
+                except Exception:
+                    pass
+
+            policy = AgentPolicyInput(
+                allowed_programs=["11111111111111111111111111111111", "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx", "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"],
+                token_allowlist=[SOL_MINT, USDC_MINT],
+                max_lamports_per_tx=1_000_000_000,
+                daily_spend_limit_usd=100.0,
+                daily_swap_volume_usd=500.0,
+                slippage_bps=50,
+            )
+
+            if not agent:
+                agent = await client.create_agent("demo-agent-v1", policy)
+                flow_line(f"Registered new agent: {_color(TEAL, '[NEW]')}")
+            
+            balance = await client.get_balance(agent.id)
+            if balance.sol_lamports < 50000000:
+                flow_line(f"Fund: {agent.pubkey}")
+                input("Press Enter once funded...")
+                await asyncio.sleep(5)
+
             await run_simulation(client, agent.id)
 
     flow_step("Cleanup...")

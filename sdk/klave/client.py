@@ -105,6 +105,10 @@ class KlaveClient:
         """Check the system health status."""
         return await self._request("GET", "/health")
 
+    def set_api_key(self, api_key: str) -> None:
+        """Set the API key for future requests."""
+        self._api_key = api_key
+
     async def create_agent(
         self,
         label: str,
@@ -120,7 +124,10 @@ class KlaveClient:
         data = await self._request(
             "POST", "/api/v1/agents", json=payload.model_dump(), use_operator_key=False
         )
-        return Agent.model_validate(data)
+        agent = Agent.model_validate(data)
+        if agent.api_key:
+            self._api_key = agent.api_key
+        return agent
 
     async def list_agents(self) -> list[Agent]:
         """List all registered agents."""

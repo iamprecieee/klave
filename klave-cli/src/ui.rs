@@ -1,8 +1,8 @@
+use std::time::Duration;
+
 use console::style;
 use rand::random;
 
-// ── Palette ─────────────────────────────────────────────────────
-//
 //   #16a085  → teal   (xterm 36)  — accent, step markers, success
 //   #d97706  → amber  (xterm 172) — structural chrome, brand
 //   #ecece0  → cream  (xterm 255) — text labels
@@ -13,11 +13,7 @@ const AMBER: u8 = 172;
 const CREAM: u8 = 255;
 const BLUE: u8 = 75;
 
-// ── Box-drawing width ───────────────────────────────────────────
-
 const BOX_WIDTH: usize = 46;
-
-// ── Banner ──────────────────────────────────────────────────────
 
 pub fn banner() {
     let art = r#"
@@ -29,10 +25,7 @@ pub fn banner() {
  ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝"#;
 
     println!("{}", style(art).color256(TEAL).bold());
-    println!(
-        " {}",
-        style(tagline()).color256(CREAM).dim()
-    );
+    println!(" {}", style(tagline()).color256(CREAM).dim());
     println!();
 }
 
@@ -51,8 +44,6 @@ fn tagline() -> &'static str {
     ];
     LINES[random::<u8>() as usize % LINES.len()]
 }
-
-// ── Flow primitives ─────────────────────────────────────────────
 
 pub fn flow_start(cmd: &str) {
     println!(
@@ -75,11 +66,7 @@ pub fn flow_step(text: &str) {
 }
 
 pub fn flow_line(text: &str) {
-    println!(
-        "{}  {}",
-        style("│").color256(AMBER),
-        text
-    );
+    println!("{}  {}", style("│").color256(AMBER), text);
 }
 
 pub fn flow_done(text: &str) {
@@ -99,16 +86,13 @@ pub fn flow_end(text: &str) {
     );
 }
 
-// ── Info box ────────────────────────────────────────────────────
-
 pub fn flow_box(title: &str, rows: &[(&str, &str)]) {
-    // Calculate the max content width
     let content_widths: Vec<usize> = rows
         .iter()
-        .map(|(k, v)| k.len() + 2 + v.len()) // "key: value"
+        .map(|(key, value)| key.len() + 2 + value.len())
         .collect();
-    let max_content = content_widths.iter().copied().max().unwrap_or(0);
-    let inner = max_content.max(BOX_WIDTH - 4);
+    let max_content_width = content_widths.iter().copied().max().unwrap_or(0);
+    let inner = max_content_width.max(BOX_WIDTH - 4);
 
     // Title line: ◇  title ───────────╮
     let dash_count = inner.saturating_sub(title.len()).saturating_sub(1).max(1);
@@ -148,8 +132,6 @@ pub fn flow_box(title: &str, rows: &[(&str, &str)]) {
     );
 }
 
-// ── Spinner (for long-running tasks) ────────────────────────────
-
 pub fn make_spinner(message: &str) -> indicatif::ProgressBar {
     let pb = indicatif::ProgressBar::new_spinner();
     let template = format!(
@@ -164,11 +146,9 @@ pub fn make_spinner(message: &str) -> indicatif::ProgressBar {
             .expect("valid template"),
     );
     pb.set_message(message.to_string());
-    pb.enable_steady_tick(std::time::Duration::from_millis(80));
+    pb.enable_steady_tick(Duration::from_millis(80));
     pb
 }
-
-// ── Styled helpers ──────────────────────────────────────────────
 
 pub fn info(text: &str) -> String {
     style(text).color256(BLUE).to_string()

@@ -3,7 +3,6 @@ const CONFIG = {
     window.location.hostname === "localhost"
       ? "http://localhost:3000"
       : window.location.origin,
-  pollInterval: 1000, // Reduced to 1s as requested/discussed
   explorerBase: "https://explorer.solana.com/tx/",
   explorerSuffix: "?cluster=devnet",
 };
@@ -12,6 +11,8 @@ const STATE = {
   agents: {}, // map of agentId -> lastKnownData
   txSignatures: new Set(),
   isPolling: false,
+  eventSource: null,
+  abortController: null,
 };
 
 const truncate = (s, n = 6) => {
@@ -222,7 +223,9 @@ function renderFeed(entries) {
   if (empty) empty.remove();
 
   // Prepend new transactions
-  const newEntries = entries.filter((e) => !STATE.txSignatures.has(e.tx_signature));
+  const newEntries = entries.filter(
+    (e) => !STATE.txSignatures.has(e.tx_signature),
+  );
   newEntries.reverse().forEach((e) => {
     el.insertBefore(renderTx(e), el.firstChild);
     STATE.txSignatures.add(e.tx_signature);
@@ -242,8 +245,22 @@ function renderFeed(entries) {
   }
 }
 
-// Read API key from ?key= query parameter
-const API_KEY = new URLSearchParams(window.location.search).get("key") || "";
+let API_KEY = localStorage.getItem("klave_operator_key");
+const urlKey = new URLSearchParams(window.location.search).get("key");
+
+if (urlKey) {
+  API_KEY = urlKey;
+  localStorage.setItem("klave_operator_key", API_KEY);
+  // Clean URL to avoid leaking in history
+  window.history.replaceState({}, document.title, window.location.pathname);
+}
+
+if (!API_KEY) {
+  API_KEY = prompt("Enter KLAVE Operator API Key:") || "";
+  if (API_KEY) {
+    localStorage.setItem("klave_operator_key", API_KEY);
+  }
+}
 
 async function fetchJson(path) {
   const headers = {};
@@ -265,7 +282,7 @@ async function poll() {
     const balances = {},
       tokens = {},
       entries = [];
-    
+
     await Promise.all(
       agents.map(async (a) => {
         try {
@@ -282,12 +299,12 @@ async function poll() {
         }
       }),
     );
-    
+
     entries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    
+
     renderAgents(agents, balances, tokens);
     renderFeed(entries);
-    
+
     dot.classList.remove("offline");
     txt.textContent = `Live \u00b7 ${agents.length} agent${agents.length !== 1 ? "s" : ""} \u00b7 ${fmtClock()}`;
   } catch (err) {
@@ -296,12 +313,120 @@ async function poll() {
     txt.textContent = "Offline \u2014 " + err.message;
   } finally {
     STATE.isPolling = false;
-    setTimeout(poll, CONFIG.pollInterval);
   }
 }
 
-// Initial poll start
-poll();
+async function connectSSE() {
+  if (STATE.abortController) {
+    STATE.abortController.abort();
+  }
+
+  STATE.abortController = new AbortController();
+  const { signal } = STATE.abortController;
+
+  const url = new URL(CONFIG.baseUrl + "/api/v1/events");
+  const headers = { Accept: "text/event-stream" };
+  if (API_KEY) headers["x-api-key"] = API_KEY;
+
+  console.log("Connecting to SSE (via fetch)...");
+
+  try {
+    const response = await fetch(url.toString(), { headers, signal });
+    if (!response.ok) {
+      if (response.status === 401) {
+        console.error("SSE Unauthorized. Check your API key.");
+        document.getElementById("statusDot").classList.add("offline");
+        document.getElementById("statusText").textContent =
+          "Unauthorized (Invalid Key)";
+        return;
+      }
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    console.log("SSE connected");
+    document.getElementById("statusDot").classList.remove("offline");
+    document.getElementById("statusText").textContent =
+      "Live (SSE) \u00b7 " + fmtClock();
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop();
+
+      for (const part of parts) {
+        const dataLine = part.split("\n").find((l) => l.startsWith("data:"));
+        if (dataLine) {
+          try {
+            const json = dataLine.slice(5).trim();
+            if (json) {
+              const { type, data } = JSON.parse(json);
+              console.log("SSE Event:", type, data);
+              handleServerEvent(type, data);
+            }
+          } catch (e) {
+            console.error("SSE JSON error:", e);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    if (err.name === "AbortError") return;
+    console.warn("SSE connection error, retrying in 5s...", err);
+    document.getElementById("statusDot").classList.add("offline");
+    setTimeout(connectSSE, 5000);
+  }
+}
+
+async function handleServerEvent(type, data) {
+  switch (type) {
+    case "AgentCreated":
+      // Full refresh on new agent for simplicity
+      await poll();
+      break;
+    case "TransactionExecuted":
+    case "BalanceUpdated":
+      if (data.agent_id) {
+        // Targeted refetch for the specific agent
+        try {
+          const [bal, tok, hist] = await Promise.all([
+            fetchJson(`/api/v1/agents/${data.agent_id}/balance`).catch(
+              () => null,
+            ),
+            fetchJson(`/api/v1/agents/${data.agent_id}/tokens`).catch(() => []),
+            fetchJson(`/api/v1/agents/${data.agent_id}/history`).catch(
+              () => [],
+            ),
+          ]);
+
+          const agent = STATE.agents[data.agent_id];
+          if (agent) {
+            const el = document.getElementById(`agent-${data.agent_id}`);
+            if (el) updateAgentElement(el, agent, bal, tok);
+            // Also update history feed
+            if (hist.length) renderFeed(hist);
+          }
+        } catch (e) {
+          console.warn("SSE-triggered fetch error:", e);
+        }
+      }
+      break;
+    case "Message":
+      console.log("Server message:", data.text);
+      break;
+  }
+}
+
+// Initial load
+poll().then(() => {
+  connectSSE();
+});
 
 // Update health link
 document.getElementById("healthLink").href = CONFIG.baseUrl + "/health";

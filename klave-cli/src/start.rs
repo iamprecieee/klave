@@ -1,8 +1,6 @@
-use std::os::unix::io::AsRawFd;
-use std::process::Stdio;
+use std::{io, mem, os::unix::io::AsRawFd, process::Stdio, time::Duration};
 
-use tokio::process::Command;
-use tokio::signal;
+use tokio::{process::Command, signal, time};
 
 use crate::ui;
 use crate::utils::project_root;
@@ -36,9 +34,7 @@ pub async fn run(
             ("dashboard", dash_str),
         ],
     );
-
     ui::flow_blank();
-
     ui::flow_step("Compiling workspace...");
 
     let pb = ui::make_spinner("Assembling binaries...");
@@ -91,6 +87,7 @@ pub async fn run(
                     kora_cfg.replace("price_source = \"Jupiter\"", "price_source = \"Mock\"");
                 price_source = "Mock";
             }
+
             std::fs::write(&kora_toml_path, &kora_cfg)?;
         } else {
             price_source = "Mock";
@@ -139,8 +136,9 @@ pub async fn run(
 
             if let Ok(child) = dash_child {
                 children.push(("dashboard".to_string(), child));
-                let api_key = std::env::var("KLAVE_OPERATOR_API_KEY").unwrap_or_default();
-                service_rows.push(("dashboard", format!("http://localhost:8888?key={api_key}")));
+
+                let _api_key = std::env::var("KLAVE_OPERATOR_API_KEY").unwrap_or_default();
+                service_rows.push(("dashboard", "http://localhost:8888".to_string()));
             }
         }
     }
@@ -155,15 +153,15 @@ pub async fn run(
         .spawn()?;
 
     children.push(("server".to_string(), server_child));
+
     let port = std::env::var("KLAVE_PORT").unwrap_or_else(|_| "3000".to_string());
     service_rows.push(("server", format!("http://localhost:{port}")));
     service_rows.push(("logs", "klave.log".to_string()));
 
     let rows_ref: Vec<(&str, &str)> = service_rows.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
     ui::flow_box("Services", &rows_ref);
-
     ui::flow_blank();
-
     ui::flow_step("Ready");
     ui::flow_line("Accepting autonomous agent connections.");
     ui::flow_line(&format!(
@@ -180,6 +178,7 @@ pub async fn run(
 
     ui::flow_blank();
     ui::flow_step("Shutting down...");
+
     for (name, mut child) in children.into_iter().rev() {
         #[cfg(unix)]
         {
@@ -187,16 +186,19 @@ pub async fn run(
                 unsafe {
                     libc::kill(pid as i32, libc::SIGTERM);
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                time::sleep(Duration::from_millis(200)).await;
             }
         }
+
         let _ = child.kill().await;
         let _ = child.wait().await;
+
         ui::flow_line(&format!("{} detached", ui::dim(&name)));
     }
 
     ui::flow_blank();
     ui::flow_end("Session terminated. Goodbye!");
+
     println!();
     Ok(())
 }
@@ -218,8 +220,9 @@ impl Drop for TermiosGuard {
 
 #[cfg(unix)]
 fn suppress_ctrl_c_echo() -> Option<TermiosGuard> {
-    let fd = std::io::stdin().as_raw_fd();
-    let mut termios: libc::termios = unsafe { std::mem::zeroed() };
+    let fd = io::stdin().as_raw_fd();
+    let mut termios: libc::termios = unsafe { mem::zeroed() };
+
     if unsafe { libc::tcgetattr(fd, &mut termios) } != 0 {
         return None;
     }
@@ -227,6 +230,7 @@ fn suppress_ctrl_c_echo() -> Option<TermiosGuard> {
         fd,
         original: termios,
     };
+
     termios.c_lflag &= !libc::ECHOCTL;
     unsafe { libc::tcsetattr(fd, libc::TCSANOW, &termios) };
     Some(guard)

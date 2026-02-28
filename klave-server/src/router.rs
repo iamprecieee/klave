@@ -1,30 +1,44 @@
+use std::sync::Arc;
+
 use axum::{
     Router, middleware,
     routing::{delete, get, post, put},
 };
+use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
 
 use crate::{
-    handlers::{agents, health, orca, transactions},
-    middleware::{any_key_auth, api_key_auth, operator_key_auth},
+    handlers::{agents, events, health, orca, transactions},
+    middleware::{api_key_auth, operator_key_auth},
     state::AppState,
 };
 
 pub fn build_router(state: AppState) -> Router {
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_second(100)
+        .burst_size(100)
+        .finish()
+        .unwrap();
+
+    let public_routes = Router::new().route("/agents", post(agents::create_agent));
+
     let operator_only_routes = Router::new()
+        .route("/agents", get(agents::list_agents))
         .route("/agents/{id}", delete(agents::deactivate_agent))
         .route("/agents/{id}/policy", put(agents::update_policy))
+        .route("/events", get(events::sse_handler))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             operator_key_auth,
         ));
 
     let shared_routes = Router::new()
-        .route("/agents", post(agents::create_agent))
-        .route("/agents", get(agents::list_agents))
         .route("/agents/{id}/history", get(agents::get_agent_history))
         .route("/agents/{id}/balance", get(agents::get_agent_balance))
         .route("/agents/{id}/tokens", get(agents::get_agent_token_balances))
-        .layer(middleware::from_fn_with_state(state.clone(), any_key_auth));
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            api_key_auth.clone(),
+        ));
 
     let agent_only_routes = Router::new()
         .route(
@@ -37,6 +51,7 @@ pub fn build_router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(state.clone(), api_key_auth));
 
     let api_routes = Router::new()
+        .merge(public_routes)
         .merge(operator_only_routes)
         .merge(shared_routes)
         .merge(agent_only_routes);
@@ -44,5 +59,6 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health_check))
         .nest("/api/v1", api_routes)
+        .layer(GovernorLayer::new(Arc::new(governor_conf)))
         .with_state(state)
 }

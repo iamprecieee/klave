@@ -7,10 +7,10 @@ with modern LangChain agents and async event loops.
 Usage::
 
     from klave.client import KlaveClient
-    from klave.tools import build_tools
+    from klave.tools import build_agent_tools
 
     client = KlaveClient("http://localhost:3000", api_key="key")
-    tools = build_tools(client)
+    tools = build_agent_tools(client)
     # pass `tools` to your LangChain agent
 """
 
@@ -24,8 +24,16 @@ from langchain_core.tools import tool
 from klave.client import KlaveClient
 
 
-def build_tools(client: KlaveClient) -> list:
-    """Build a list of LangChain tools bound to the given client."""
+def build_agent_tools(client: KlaveClient) -> list:
+    """Build tools for an autonomous agent (excludes administrative tasks)."""
+    tools = build_operator_tools(client)
+    # Filter out admin-only tools
+    admin_tools = {"update_policy", "delete_agent", "list_agents"}
+    return [t for t in tools if t.name not in admin_tools]
+
+
+def build_operator_tools(client: KlaveClient) -> list:
+    """Build the full set of tools for a KLAVE operator."""
 
     @tool
     async def create_agent(label: str) -> dict:
@@ -253,6 +261,18 @@ def build_tools(client: KlaveClient) -> list:
         except Exception as e:
             return f"[ERROR] Failed to save state: {str(e)}"
 
+    @tool
+    async def wait_for_manual_funding(address: str) -> str:
+        """Pause execution and prompt the user to fund the given Solana
+        address. Use after creating a new agent or when funds are low.
+        The user will notify you once funding is complete."""
+        print(f"\n{'-'*40}")
+        print(f"FUNDING REQUIRED: Please send devnet SOL to:")
+        print(f"Address: {address}")
+        print(f"{'-'*40}\n")
+        input("Press Enter once you have funded the address...")
+        return "User confirmed funding. Please check balance to verify."
+
     return [
         create_agent,
         list_agents,
@@ -270,4 +290,5 @@ def build_tools(client: KlaveClient) -> list:
         get_health,
         list_tokens,
         save_heartbeat,
+        wait_for_manual_funding,
     ]
