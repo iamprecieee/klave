@@ -223,12 +223,14 @@ function renderFeed(entries) {
   if (empty) empty.remove();
 
   // Prepend new transactions
-  const newEntries = entries.filter(
-    (e) => !STATE.txSignatures.has(e.tx_signature),
-  );
+  const newEntries = entries.filter((e) => {
+    const key = e.tx_signature || `audit-${e.id}`;
+    return !STATE.txSignatures.has(key);
+  });
   newEntries.reverse().forEach((e) => {
     el.insertBefore(renderTx(e), el.firstChild);
-    STATE.txSignatures.add(e.tx_signature);
+    const key = e.tx_signature || `audit-${e.id}`;
+    STATE.txSignatures.add(key);
   });
 
   // Limit feed to 50 items and prune the signature set
@@ -391,30 +393,40 @@ async function handleServerEvent(type, data) {
       await poll();
       break;
     case "TransactionExecuted":
+      if (data.agent_id) {
+        // Update transaction feed (reads from local audit DB)
+        try {
+          const hist = await fetchJson(
+            `/api/v1/agents/${data.agent_id}/history`,
+          ).catch(() => []);
+          if (hist.length) renderFeed(hist);
+        } catch (e) {
+          console.warn("SSE history fetch error:", e);
+        }
+      }
+      break;
     case "BalanceUpdated":
       if (data.agent_id) {
-        // Targeted refetch for the specific agent
-        try {
-          const [bal, tok, hist] = await Promise.all([
-            fetchJson(`/api/v1/agents/${data.agent_id}/balance`).catch(
-              () => null,
-            ),
-            fetchJson(`/api/v1/agents/${data.agent_id}/tokens`).catch(() => []),
-            fetchJson(`/api/v1/agents/${data.agent_id}/history`).catch(
-              () => [],
-            ),
-          ]);
-
-          const agent = STATE.agents[data.agent_id];
-          if (agent) {
-            const el = document.getElementById(`agent-${data.agent_id}`);
-            if (el) updateAgentElement(el, agent, bal, tok);
-            // Also update history feed
-            if (hist.length) renderFeed(hist);
+        // Use balance values pushed directly from the server — no RPC fetch needed
+        const agent = STATE.agents[data.agent_id];
+        if (agent) {
+          const el = document.getElementById(`agent-${data.agent_id}`);
+          if (el) {
+            const bal = {
+              sol_lamports: data.sol_lamports,
+              vault_lamports: data.vault_lamports,
+            };
+            const tok = data.tokens || [];
+            updateAgentElement(el, agent, bal, tok);
           }
-        } catch (e) {
-          console.warn("SSE-triggered fetch error:", e);
         }
+        // Also refresh the feed in case new audit entries arrived
+        try {
+          const hist = await fetchJson(
+            `/api/v1/agents/${data.agent_id}/history`,
+          ).catch(() => []);
+          if (hist.length) renderFeed(hist);
+        } catch (_) { }
       }
       break;
     case "Message":

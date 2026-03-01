@@ -26,7 +26,7 @@ use solana_sdk::{
     transaction::{Transaction, VersionedTransaction},
 };
 use solana_system_interface::{instruction::transfer, program::ID as SYSTEM_PROGRAM_ID};
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 use uuid::Uuid;
 
 use crate::{event::ServerEvent, middleware::AuthContext, response::ApiResponse, state::AppState};
@@ -380,9 +380,33 @@ pub async fn execute_transaction(
         signature: tx_sig.to_string(),
         agent_id: agent_id.clone(),
     });
-    let _ = state.event_tx.send(ServerEvent::BalanceUpdated {
-        agent_id: agent_id.clone(),
-    });
+
+    // Spawn background task to fetch confirmed balances and push via SSE
+    {
+        let state = state.clone();
+        let agent_id = agent_id.clone();
+        let agent_pubkey = agent_pubkey;
+        let vault_pda = vault_pda;
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            let (sol, vault) = state
+                .kora_gateway
+                .get_balances(&agent_pubkey, &vault_pda)
+                .await
+                .unwrap_or((0, 0));
+            let tokens = state
+                .kora_gateway
+                .get_token_balances(&agent_pubkey)
+                .await
+                .unwrap_or_default();
+            let _ = state.event_tx.send(ServerEvent::BalanceUpdated {
+                agent_id,
+                sol_lamports: sol,
+                vault_lamports: vault,
+                tokens,
+            });
+        });
+    }
 
     ApiResponse::success(
         GatewayResponse {

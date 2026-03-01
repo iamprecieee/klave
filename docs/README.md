@@ -240,6 +240,7 @@ All `/api/v1` endpoints require the `X-API-Key` header. Full reference with requ
 | `GET`    | `/api/v1/agents/{id}/balance` | SOL + vault balance      | Agent    |
 | `GET`    | `/api/v1/agents/{id}/tokens`  | SPL token balances       | Agent    |
 | `GET`    | `/api/v1/agents/{id}/history` | Transaction audit log    | Agent    |
+| `POST`   | `/api/v1/agents/{id}/notify`  | Trigger dashboard refresh| Agent    |
 | `PUT`    | `/api/v1/agents/{id}/policy`  | Update agent policy      | Operator |
 
 ### Transactions

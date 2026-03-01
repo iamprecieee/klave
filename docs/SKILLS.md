@@ -179,6 +179,14 @@ Send any subset of policy fields to update:
 }
 ```
 
+### Notify Balance Updated
+
+`POST /api/v1/agents/{id}/notify`
+
+Emits a `BalanceUpdated` SSE event to the dashboard. Call this after detecting external on-chain changes (e.g. receiving a deposit from outside the system) to trigger a real-time dashboard refresh. No request body needed.
+
+**Response** `204`: No content.
+
 ---
 
 ## Transactions
@@ -408,6 +416,7 @@ Every agent has a policy that governs what it can do. The policy is set at creat
 | Rebalance token holdings     | `POST /api/v1/agents/{id}/orca/swap`                                                              |
 | Tighten agent permissions    | `PUT /api/v1/agents/{id}/policy`                                                                  |
 | Review agent activity        | `GET /api/v1/agents/{id}/history`                                                                 |
+| Trigger dashboard refresh    | `POST /api/v1/agents/{id}/notify`                                                                 |
 
 ---
 

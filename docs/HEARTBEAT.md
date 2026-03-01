@@ -91,6 +91,14 @@ X-API-Key: <key>
 { "whirlpool": "<pool-address>", "input_mint": "So11...", "amount": 10000000 }
 ```
 
+### Notify dashboard (after external deposits)
+
+```bash
+POST /api/v1/agents/{id}/notify
+X-API-Key: <key>
+# → 204 No Content — triggers dashboard refresh
+```
+
 ## Prerequisites
 
 Your agent's policy must include the programs needed for each action:

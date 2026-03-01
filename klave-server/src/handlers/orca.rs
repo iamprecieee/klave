@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
 };
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 use uuid::Uuid;
 
 use klave_core::{
@@ -20,7 +20,7 @@ use solana_sdk::{
     transaction::{Transaction, VersionedTransaction},
 };
 
-use crate::{middleware::AuthContext, response::ApiResponse, state::AppState};
+use crate::{event::ServerEvent, middleware::AuthContext, response::ApiResponse, state::AppState};
 
 #[derive(Debug, Deserialize)]
 pub struct OrcaSwapRequest {
@@ -223,6 +223,15 @@ pub async fn execute_swap(
         }
     };
 
+    tracing::info!(
+        agent_id = %agent.id,
+        tx_signature = %tx_signature,
+        input_mint = %payload.input_mint,
+        amount = %payload.amount,
+        via_kora = %via_kora,
+        "orca swap executed"
+    );
+
     let entry = NewAuditEntry {
         agent_id: agent.id.clone(),
         instruction_type: InstructionType::TokenSwap.to_string(),
@@ -237,6 +246,40 @@ pub async fn execute_swap(
         })),
     };
     let _ = state.audit_store.append(&entry).await;
+
+    let _ = state.event_tx.send(ServerEvent::TransactionExecuted {
+        signature: tx_signature.to_string(),
+        agent_id: agent.id.clone(),
+    });
+
+    // Spawn background task to fetch confirmed balances and push via SSE
+    {
+        let state = state.clone();
+        let agent_id = agent.id.clone();
+        let agent_pubkey = agent_pubkey;
+        let program_id = Pubkey::new_from_array(klave_anchor::ID.to_bytes());
+        let (vault_pda, _) =
+            Pubkey::find_program_address(&[b"vault", agent_pubkey.as_ref()], &program_id);
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            let (sol, vault) = state
+                .kora_gateway
+                .get_balances(&agent_pubkey, &vault_pda)
+                .await
+                .unwrap_or((0, 0));
+            let tokens = state
+                .kora_gateway
+                .get_token_balances(&agent_pubkey)
+                .await
+                .unwrap_or_default();
+            let _ = state.event_tx.send(ServerEvent::BalanceUpdated {
+                agent_id,
+                sol_lamports: sol,
+                vault_lamports: vault,
+                tokens,
+            });
+        });
+    }
 
     ApiResponse::success(
         OrcaSwapResponse {

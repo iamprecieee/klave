@@ -266,10 +266,10 @@ def build_operator_tools(client: KlaveClient) -> list:
         """Pause execution and prompt the user to fund the given Solana
         address. Use after creating a new agent or when funds are low.
         The user will notify you once funding is complete."""
-        print(f"\n{'-'*40}")
-        print(f"FUNDING REQUIRED: Please send devnet SOL to:")
+        print(f"\n{'-' * 40}")
+        print("FUNDING REQUIRED: Please send devnet SOL to:")
         print(f"Address: {address}")
-        print(f"{'-'*40}\n")
+        print(f"{'-' * 40}\n")
         input("Press Enter once you have funded the address...")
         return "User confirmed funding. Please check balance to verify."
 

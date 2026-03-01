@@ -18,7 +18,7 @@ cp docs/HEARTBEAT.md "$OPENCLAW_STATE_DIR/klave/heartbeat.md"
 
 Give your OpenClaw agent this prompt:
 
-> "I have installed the `klave` skill in your state directory. Please read `klave/skill.md` and follow the `klave/register.md` playbook to create your wallet. Once you have a public key, provide it to me so I can fund it on devnet. After funding, you should follow the `klave/heartbeat.md` cycle for autonomous operations."
+> "I have installed the `klave` skill in your state directory. Please read `klave/skill.md` and follow the `klave/register.md` playbook to create your wallet. Once you have a public key, provide it to me so I can fund it on devnet. Add the `klave/heartbeat.md` entry to your workspace `HEARTBEAT.md`. After funding, you should follow the `klave/heartbeat.md` cycle for autonomous operations."
 
 ## 3. Funding (Manual Step)
 

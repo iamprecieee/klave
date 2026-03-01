@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use klave_core::{
     agent::model::{AgentBalance, AgentPolicyInput, CreateAgentRequest},
+    audit::store::NewAuditEntry,
     error::KlaveError,
 };
 
@@ -26,10 +27,25 @@ pub async fn create_agent(
 
     match state.agent_repo.create(&body).await {
         Ok(agent) => {
+            info!(agent_id = %agent.id, pubkey = %agent.pubkey, label = %agent.label, "agent wallet created");
+
             let _ = state.event_tx.send(ServerEvent::AgentCreated {
                 id: agent.id.clone(),
                 label: agent.label.clone(),
             });
+
+            let entry = NewAuditEntry {
+                agent_id: agent.id.clone(),
+                instruction_type: "wallet_created".to_string(),
+                status: "confirmed".to_string(),
+                tx_signature: None,
+                policy_violations: None,
+                metadata: Some(serde_json::json!({
+                    "pubkey": agent.pubkey,
+                    "label": agent.label,
+                })),
+            };
+            let _ = state.audit_store.append(&entry).await;
 
             match serde_json::to_value(&agent) {
                 Ok(val) => ApiResponse::created(val, "agent created").into_response(),
@@ -334,4 +350,67 @@ pub async fn get_agent_token_balances(
                 .into_response()
         }
     }
+}
+
+pub async fn notify_balance_updated(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<String>,
+) -> Response {
+    if !auth.is_operator && auth.agent_id.as_deref() != Some(&id) {
+        return ApiResponse::<()>::error(StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    if Uuid::parse_str(&id).is_err() {
+        return ApiResponse::<()>::error(StatusCode::BAD_REQUEST, "Invalid Agent ID format")
+            .into_response();
+    }
+
+    let agent = match state.agent_repo.find_by_id(&id).await {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return ApiResponse::<()>::error(StatusCode::NOT_FOUND, "agent not found")
+                .into_response();
+        }
+        Err(e) => {
+            return ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                .into_response();
+        }
+    };
+
+    let agent_pubkey: Pubkey = match std::str::FromStr::from_str(&agent.pubkey) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return ApiResponse::<()>::error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Invalid pubkey".to_string(),
+            )
+            .into_response();
+        }
+    };
+
+    let program_id = Pubkey::new_from_array(klave_anchor::ID.to_bytes());
+    let (vault_pda, _) =
+        Pubkey::find_program_address(&[b"vault", agent_pubkey.as_ref()], &program_id);
+
+    let (sol, vault) = state
+        .kora_gateway
+        .get_balances(&agent_pubkey, &vault_pda)
+        .await
+        .unwrap_or((0, 0));
+    let tokens = state
+        .kora_gateway
+        .get_token_balances(&agent_pubkey)
+        .await
+        .unwrap_or_default();
+
+    let _ = state.event_tx.send(ServerEvent::BalanceUpdated {
+        agent_id: id.clone(),
+        sol_lamports: sol,
+        vault_lamports: vault,
+        tokens,
+    });
+    info!(agent_id = %id, "balance update notification sent");
+
+    ApiResponse::<()>::no_content("balance update notification sent").into_response()
 }
