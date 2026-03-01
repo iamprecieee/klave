@@ -1,8 +1,8 @@
-use solana_keychain::Signer as KSigner;
 use std::sync::Arc;
 
-use crate::agent::repository::AgentRepository;
-use crate::error::KlaveError;
+use solana_keychain::Signer as KSigner;
+
+use crate::{agent::repository::AgentRepository, error::KlaveError};
 
 #[derive(Clone)]
 pub struct AgentSigner {

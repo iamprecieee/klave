@@ -1,18 +1,19 @@
+use std::str::FromStr;
+use uuid::Uuid;
+
 use axum::{
     Extension, Json,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use solana_sdk::pubkey::Pubkey;
-use tracing::{error, info};
-use uuid::Uuid;
-
 use klave_core::{
     agent::model::{AgentBalance, AgentPolicyInput, CreateAgentRequest},
     audit::store::NewAuditEntry,
     error::KlaveError,
 };
+use solana_sdk::pubkey::Pubkey;
+use tracing::{error, info};
 
 use crate::{event::ServerEvent, middleware::AuthContext, response::ApiResponse, state::AppState};
 
@@ -200,7 +201,7 @@ pub async fn get_agent_balance(
         }
     };
 
-    let agent_pubkey: Pubkey = match std::str::FromStr::from_str(&agent.pubkey) {
+    let agent_pubkey: Pubkey = match FromStr::from_str(&agent.pubkey) {
         Ok(pk) => pk,
         Err(_) => {
             return ApiResponse::<()>::error(
@@ -327,7 +328,7 @@ pub async fn get_agent_token_balances(
         }
     };
 
-    let agent_pubkey: Pubkey = match std::str::FromStr::from_str(&agent.pubkey) {
+    let agent_pubkey: Pubkey = match FromStr::from_str(&agent.pubkey) {
         Ok(pk) => pk,
         Err(_) => {
             return ApiResponse::<()>::error(
@@ -378,7 +379,7 @@ pub async fn notify_balance_updated(
         }
     };
 
-    let agent_pubkey: Pubkey = match std::str::FromStr::from_str(&agent.pubkey) {
+    let agent_pubkey: Pubkey = match FromStr::from_str(&agent.pubkey) {
         Ok(pk) => pk,
         Err(_) => {
             return ApiResponse::<()>::error(

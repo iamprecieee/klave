@@ -1,113 +1,92 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>KLAVE Dashboard</title>
-    <link rel="stylesheet" href="./style.css" />
-  </head>
 
-  <body>
-    <div class="crt-overlay"></div>
-    <div class="crt-flicker"></div>
-    <header class="header">
-      <div class="logo">
-        <div class="logo-mark">K</div>
-        <span class="logo-text">Klave</span>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KLAVE Dashboard</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+  <div class="crt-overlay"></div>
+  <div class="crt-flicker"></div>
+  <header class="header">
+    <div class="logo">
+      <div class="logo-mark">K</div>
+      <span class="logo-text">Klave</span>
+    </div>
+    <div class="header-right">
+      <button id="themeToggle" class="theme-toggle" title="Toggle Theme">
+        <svg class="sun-icon" viewBox="0 0 24 24">
+          <path
+            d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 00-1.41-1.41l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 00-1.41-1.41l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z" />
+        </svg>
+        <svg class="moon-icon" viewBox="0 0 24 24">
+          <path
+            d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z" />
+        </svg>
+      </button>
+      <span class="network-chip">Devnet</span>
+      <div class="status-chip">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Connecting...</span>
       </div>
-      <div class="header-right">
-        <button id="themeToggle" class="theme-toggle" title="Toggle Theme">
-          <svg class="sun-icon" viewBox="0 0 24 24">
-            <path
-              d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 00-1.41-1.41l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 00-1.41-1.41l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"
-            />
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="card">
+      <div class="card-head">
+        <div class="card-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
           </svg>
-          <svg class="moon-icon" viewBox="0 0 24 24">
-            <path
-              d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"
-            />
-          </svg>
-        </button>
-        <span class="network-chip">Devnet</span>
-        <div class="status-chip">
-          <span class="status-dot" id="statusDot"></span>
-          <span id="statusText">Connecting...</span>
+          Agents
+        </div>
+        <span class="card-badge" id="agentCount">0</span>
+      </div>
+      <div class="card-body" id="agentGrid">
+        <div class="skel">
+          <div class="skel-line s"></div>
+          <div class="skel-line l"></div>
+          <div class="skel-line m"></div>
         </div>
       </div>
-    </header>
+    </section>
 
-    <main class="main">
-      <section class="card">
-        <div class="card-head">
-          <div class="card-label">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-            Agents
-          </div>
-          <span class="card-badge" id="agentCount">0</span>
+    <section class="card">
+      <div class="card-head">
+        <div class="card-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+          </svg>
+          Transactions
         </div>
-        <div class="card-body" id="agentGrid">
-          <div class="skel">
-            <div class="skel-line s"></div>
-            <div class="skel-line l"></div>
-            <div class="skel-line m"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <div class="card-label">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
+        <span class="card-badge" id="txCount">0</span>
+      </div>
+      <div class="card-body">
+        <ul class="tx-list" id="txFeed">
+          <li class="empty">
+            <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path
-                d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"
-              />
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
-            Transactions
-          </div>
-          <span class="card-badge" id="txCount">0</span>
-        </div>
-        <div class="card-body">
-          <ul class="tx-list" id="txFeed">
-            <li class="empty">
-              <svg
-                class="empty-icon"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                />
-              </svg>
-              <div class="empty-title">No Transactions</div>
-              <div class="empty-hint">Awaiting activity...</div>
-            </li>
-          </ul>
-        </div>
-      </section>
-    </main>
+            <div class="empty-title">No Transactions</div>
+            <div class="empty-hint">Awaiting activity...</div>
+          </li>
+        </ul>
+      </div>
+    </section>
+  </main>
 
-    <footer class="footer">
-      <a href="/health" id="healthLink" target="_blank">Health</a>
-      <a href="https://github.com/iamprecieee/klave" target="_blank"
-        >Built by iamprecieee</a
-      >
-    </footer>
+  <footer class="footer">
+    <a href="/health" id="healthLink" target="_blank">Health</a>
+    <a href="https://github.com/iamprecieee/klave" target="_blank">Built by iamprecieee</a>
+  </footer>
 
-    <script src="./app.js"></script>
-  </body>
+  <script src="./app.js?v=2"></script>
+</body>
+
 </html>

@@ -1,5 +1,4 @@
-use sqlx::SqlitePool;
-use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 
 use crate::error::KlaveError;
 

@@ -1,7 +1,6 @@
 use std::process::{Command, Stdio};
 
-use crate::ui;
-use crate::utils::project_root;
+use crate::{ui, utils::project_root};
 
 pub fn run(cluster: &str) -> Result<(), Box<dyn std::error::Error>> {
     let root = project_root();

@@ -1,17 +1,17 @@
+use std::str::FromStr;
+use uuid::Uuid;
+
 use axum::{
     Extension, Json,
     extract::{Path, Query, State},
     http::StatusCode,
 };
-use serde::{Deserialize, Serialize};
-use std::{str::FromStr, time::Duration};
-use uuid::Uuid;
-
 use klave_core::{
     policy::engine::{InstructionType, PolicyEngine},
     {agent::model::SwapQuote, audit::store::NewAuditEntry},
 };
 use orca_whirlpools::SwapType;
+use serde::{Deserialize, Serialize};
 use solana_keychain::SolanaSigner;
 use solana_sdk::{
     message::Message,
@@ -247,12 +247,12 @@ pub async fn execute_swap(
     };
     let _ = state.audit_store.append(&entry).await;
 
+    let tx_sig_str = tx_signature.to_string();
     let _ = state.event_tx.send(ServerEvent::TransactionExecuted {
-        signature: tx_signature.to_string(),
+        signature: tx_sig_str.clone(),
         agent_id: agent.id.clone(),
     });
 
-    // Spawn background task to fetch confirmed balances and push via SSE
     {
         let state = state.clone();
         let agent_id = agent.id.clone();
@@ -260,8 +260,9 @@ pub async fn execute_swap(
         let program_id = Pubkey::new_from_array(klave_anchor::ID.to_bytes());
         let (vault_pda, _) =
             Pubkey::find_program_address(&[b"vault", agent_pubkey.as_ref()], &program_id);
+        let sig = tx_signature;
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(3)).await;
+            state.kora_gateway.confirm_transaction(&sig).await;
             let (sol, vault) = state
                 .kora_gateway
                 .get_balances(&agent_pubkey, &vault_pda)
@@ -283,7 +284,7 @@ pub async fn execute_swap(
 
     ApiResponse::success(
         OrcaSwapResponse {
-            tx_signature: tx_signature.to_string(),
+            tx_signature: tx_sig_str,
             via_kora,
         },
         "orca swap executed successfully",

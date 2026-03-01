@@ -1,15 +1,16 @@
+use uuid::Uuid;
+
 use chrono::Utc;
 use rand::distr::{Alphanumeric, SampleString};
 use sha2::{Digest, Sha256};
 use solana_sdk::signature::{Keypair, Signer};
 use sqlx::SqlitePool;
-use uuid::Uuid;
 
-use crate::agent::model::{
-    Agent, AgentPolicy, AgentPolicyInput, CreateAgentRequest, default_programs,
+use crate::{
+    agent::model::{Agent, AgentPolicy, AgentPolicyInput, CreateAgentRequest, default_programs},
+    crypto,
+    error::KlaveError,
 };
-use crate::crypto;
-use crate::error::KlaveError;
 
 pub struct AgentRepository {
     pool: SqlitePool,

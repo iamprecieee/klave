@@ -1,10 +1,12 @@
 use std::fs;
 
 use rand::random;
-use solana_sdk::signer::Signer;
+use solana_sdk::signer::{Signer, keypair::Keypair};
 
-use crate::ui;
-use crate::utils::{project_root, set_key};
+use crate::{
+    ui,
+    utils::{project_root, set_key},
+};
 
 fn random_hex(bytes: usize) -> String {
     (0..bytes)
@@ -44,7 +46,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     ui::flow_step("Identity cryptography");
     {
-        let keypair = solana_sdk::signer::keypair::Keypair::new();
+        let keypair = Keypair::new();
 
         set_key(&mut lines, "KORA_PRIVATE_KEY=", &keypair.to_base58_string());
         set_key(&mut lines, "KORA_PUBKEY=", &keypair.pubkey().to_string());

@@ -1,3 +1,6 @@
+use std::str::FromStr;
+use uuid::Uuid;
+
 use anchor_lang::{InstructionData, ToAccountMetas};
 use axum::{
     Extension, Json,
@@ -26,8 +29,6 @@ use solana_sdk::{
     transaction::{Transaction, VersionedTransaction},
 };
 use solana_system_interface::{instruction::transfer, program::ID as SYSTEM_PROGRAM_ID};
-use std::{str::FromStr, time::Duration};
-use uuid::Uuid;
 
 use crate::{event::ServerEvent, middleware::AuthContext, response::ApiResponse, state::AppState};
 
@@ -376,19 +377,20 @@ pub async fn execute_transaction(
     )
     .await;
 
+    let tx_sig_str = tx_sig.to_string();
     let _ = state.event_tx.send(ServerEvent::TransactionExecuted {
-        signature: tx_sig.to_string(),
+        signature: tx_sig_str.clone(),
         agent_id: agent_id.clone(),
     });
 
-    // Spawn background task to fetch confirmed balances and push via SSE
     {
         let state = state.clone();
         let agent_id = agent_id.clone();
         let agent_pubkey = agent_pubkey;
         let vault_pda = vault_pda;
+        let sig = tx_sig;
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(3)).await;
+            state.kora_gateway.confirm_transaction(&sig).await;
             let (sol, vault) = state
                 .kora_gateway
                 .get_balances(&agent_pubkey, &vault_pda)
@@ -410,7 +412,7 @@ pub async fn execute_transaction(
 
     ApiResponse::success(
         GatewayResponse {
-            signature: tx_sig.to_string(),
+            signature: tx_sig_str,
             via_kora,
         },
         "transaction sent",

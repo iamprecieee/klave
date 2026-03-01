@@ -6,7 +6,7 @@ mod response;
 mod router;
 mod state;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{io, net::SocketAddr, sync::Arc};
 
 use axum::http::{HeaderName, HeaderValue, Method, header::CONTENT_TYPE};
 use solana_client::nonblocking::rpc_client::RpcClient;
@@ -21,6 +21,7 @@ use klave_core::{
     price::PriceFeed,
     solana::{gateway::KoraGateway, orca::OrcaClient},
 };
+use tracing_subscriber::EnvFilter;
 
 use crate::config::Config;
 
@@ -40,10 +41,10 @@ async fn async_main() -> anyhow::Result<()> {
 
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .json()
+        .with_writer(io::stdout)
         .init();
 
     let config = Config::from_env();

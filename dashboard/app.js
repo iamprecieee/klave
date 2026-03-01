@@ -389,12 +389,10 @@ async function connectSSE() {
 async function handleServerEvent(type, data) {
   switch (type) {
     case "AgentCreated":
-      // Full refresh on new agent for simplicity
       await poll();
       break;
     case "TransactionExecuted":
       if (data.agent_id) {
-        // Update transaction feed (reads from local audit DB)
         try {
           const hist = await fetchJson(
             `/api/v1/agents/${data.agent_id}/history`,
@@ -407,7 +405,6 @@ async function handleServerEvent(type, data) {
       break;
     case "BalanceUpdated":
       if (data.agent_id) {
-        // Use balance values pushed directly from the server — no RPC fetch needed
         const agent = STATE.agents[data.agent_id];
         if (agent) {
           const el = document.getElementById(`agent-${data.agent_id}`);
@@ -420,7 +417,6 @@ async function handleServerEvent(type, data) {
             updateAgentElement(el, agent, bal, tok);
           }
         }
-        // Also refresh the feed in case new audit entries arrived
         try {
           const hist = await fetchJson(
             `/api/v1/agents/${data.agent_id}/history`,

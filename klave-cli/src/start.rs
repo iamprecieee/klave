@@ -1,9 +1,8 @@
-use std::{io, mem, os::unix::io::AsRawFd, process::Stdio, time::Duration};
+use std::{env, fs, io, mem, os::unix::io::AsRawFd, process::Stdio, time::Duration};
 
 use tokio::{process::Command, signal, time};
 
-use crate::ui;
-use crate::utils::project_root;
+use crate::{ui, utils::project_root};
 
 pub async fn run(
     with_kora: bool,
@@ -72,8 +71,8 @@ pub async fn run(
         let kora_toml_path = root.join("kora.toml");
         let price_source;
         if kora_toml_path.exists() {
-            let mut kora_cfg = std::fs::read_to_string(&kora_toml_path)?;
-            let has_jupiter_key = std::env::var("JUPITER_API_KEY")
+            let mut kora_cfg = fs::read_to_string(&kora_toml_path)?;
+            let has_jupiter_key = env::var("JUPITER_API_KEY")
                 .ok()
                 .filter(|k| !k.is_empty())
                 .is_some();
@@ -88,15 +87,15 @@ pub async fn run(
                 price_source = "Mock";
             }
 
-            std::fs::write(&kora_toml_path, &kora_cfg)?;
+            fs::write(&kora_toml_path, &kora_cfg)?;
         } else {
             price_source = "Mock";
         }
 
-        let rpc_url = std::env::var("SOLANA_RPC_URL")
+        let rpc_url = env::var("SOLANA_RPC_URL")
             .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
 
-        let kora_log = std::fs::File::create(root.join("kora.log"))?;
+        let kora_log = fs::File::create(root.join("kora.log"))?;
         let kora_log_err = kora_log.try_clone()?;
         let kora_child = Command::new("kora")
             .args([
@@ -137,14 +136,14 @@ pub async fn run(
             if let Ok(child) = dash_child {
                 children.push(("dashboard".to_string(), child));
 
-                let _api_key = std::env::var("KLAVE_OPERATOR_API_KEY").unwrap_or_default();
+                let _api_key = env::var("KLAVE_OPERATOR_API_KEY").unwrap_or_default();
                 service_rows.push(("dashboard", "http://localhost:8888".to_string()));
             }
         }
     }
 
     // KLAVE server.
-    let log_file = std::fs::File::create(root.join("klave.log"))?;
+    let log_file = fs::File::create(root.join("klave.log"))?;
     let log_file_err = log_file.try_clone()?;
     let server_child = Command::new(&server_bin)
         .current_dir(&root)
@@ -154,7 +153,7 @@ pub async fn run(
 
     children.push(("server".to_string(), server_child));
 
-    let port = std::env::var("KLAVE_PORT").unwrap_or_else(|_| "3000".to_string());
+    let port = env::var("KLAVE_PORT").unwrap_or_else(|_| "3000".to_string());
     service_rows.push(("server", format!("http://localhost:{port}")));
     service_rows.push(("logs", "klave.log".to_string()));
 

@@ -1,11 +1,11 @@
+use std::{convert::Infallible, time::Duration};
+
 use axum::{
     extract::State,
     response::sse::{Event, Sse},
 };
 use futures_util::stream::Stream;
-use std::{convert::Infallible, time::Duration};
-use tokio_stream::StreamExt;
-use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::{StreamExt, wrappers::BroadcastStream};
 
 use crate::state::AppState;
 

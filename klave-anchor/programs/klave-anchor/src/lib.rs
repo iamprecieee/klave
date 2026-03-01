@@ -1,5 +1,7 @@
-use anchor_lang::prelude::*;
-use anchor_lang::system_program::{transfer, Transfer};
+use anchor_lang::{
+    prelude::*,
+    system_program::{transfer, Transfer},
+};
 
 declare_id!("H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex");
 

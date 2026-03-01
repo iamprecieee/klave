@@ -27,7 +27,10 @@ impl KoraGateway {
         Self {
             kora_rpc_url,
             kora_api_key,
-            rpc_client: Arc::new(RpcClient::new(rpc_url)),
+            rpc_client: Arc::new(RpcClient::new_with_commitment(
+                rpc_url,
+                solana_commitment_config::CommitmentConfig::confirmed(),
+            )),
             http_client: Client::new(),
         }
     }
@@ -219,5 +222,22 @@ impl KoraGateway {
             .map_err(|e| KlaveError::Internal(format!("Fallback RPC Error: {}", e)))?;
 
         Ok((sig, false))
+    }
+
+    pub async fn confirm_transaction(&self, signature: &Signature) -> bool {
+        for _ in 0..30 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            match self.rpc_client.get_signature_statuses(&[*signature]).await {
+                Ok(response) => {
+                    if let Some(Some(status)) = response.value.first() {
+                        if status.err.is_none() {
+                            return true;
+                        }
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+        false
     }
 }

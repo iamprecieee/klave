@@ -1,9 +1,9 @@
-use axum::extract::State;
-use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 
-use crate::response::ApiResponse;
-use crate::state::AppState;
+use axum::extract::State;
+use solana_sdk::pubkey::Pubkey;
+
+use crate::{response::ApiResponse, state::AppState};
 
 pub async fn health_check(State(state): State<AppState>) -> ApiResponse<serde_json::Value> {
     let kora_pubkey = Pubkey::from_str(&state.config.kora_pubkey).ok();

@@ -1,30 +1,22 @@
-use std::str::FromStr;
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use orca_whirlpools::{
     SwapType, WhirlpoolsConfigInput, set_whirlpools_config_address, swap_instructions,
 };
 use orca_whirlpools_client::Whirlpool;
 use solana_account_decoder::{UiAccountData, UiAccountEncoding};
-use solana_client::nonblocking::rpc_client::RpcClient;
-use solana_client::rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig};
-use solana_client::rpc_filter::{Memcmp, RpcFilterType};
-use solana_sdk::instruction::Instruction;
-use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::Keypair;
+use solana_client::{
+    nonblocking::rpc_client::RpcClient,
+    rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig},
+    rpc_filter::{Memcmp, RpcFilterType},
+};
+use solana_sdk::{instruction::Instruction, pubkey::Pubkey, signature::Keypair};
 
-use crate::agent::model::SwapQuote;
-use crate::error::KlaveError;
+use crate::{agent::model::SwapQuote, error::KlaveError};
 
-/// Whirlpool program ID (same for mainnet and devnet)
 const WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
-
-/// Orca Whirlpools config address for Solana Devnet
 const DEVNET_WHIRLPOOLS_CONFIG: &str = "FcrweFY1G9HJAHG5inkGB6pKg1HZ6x9UC2WioAfWrGkR";
-
-/// Whirlpool account data size in bytes
 const WHIRLPOOL_ACCOUNT_SIZE: u64 = 653;
 
 pub struct OrcaInstructionResult {

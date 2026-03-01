@@ -1,6 +1,6 @@
 # KLAVE — Deep Dive
 
-A technical deep dive into the design philosophy, security model, and agent interaction patterns behind KLAVE: agentic wallet infrastructure for Solana.
+A technical deep dive into the design philosophy, security model, and agent interaction patterns behind KLAVE.
 
 ---
 
@@ -23,18 +23,18 @@ A technical deep dive into the design philosophy, security model, and agent inte
 
 KLAVE was built around a single conviction: **AI agents need wallets the same way humans do, but with stricter guardrails and zero trust.**
 
-Traditional crypto wallets assume a human operator who reads confirmation dialogs, checks addresses, and reasons about risk. Autonomous agents can't do that. They operate in tight loops, make hundreds of decisions per hour, and will happily drain a wallet if their reward signal says so.
+Traditional crypto wallets assume a human operator reads confirmation dialogs, checks addresses, and reasons about risk. Autonomous agents can't do that. They operate in tight loops, make hundreds of decisions, and will happily drain a wallet if their reward signal says so.
 
-KLAVE's answer is **policy-first autonomy**: every agent gets the freedom to transact, but within a policy boundary that the agent itself cannot modify. This creates a three-layer stack:
+KLAVE's answer is **policy-first autonomy** - every agent gets the freedom to transact, but within a policy boundary that the agent itself cannot modify. This creates a three-layer stack:
 
 ```
-┌──────────────────────────────┐
-│  Agent Logic  (Python/LLM)   │  Decides WHAT to do
-├──────────────────────────────┤
-│  Policy Engine  (Rust)       │  Decides IF it's allowed
-├──────────────────────────────┤
-│  Wallet Infra  (Solana)      │  Executes the transaction
-└──────────────────────────────┘
+┌─────────────────┐
+│  Agent Logic    │  Decides WHAT to do
+├─────────────────┤
+│  Policy Engine  │  Decides IF it's allowed
+├─────────────────┤
+│  Wallet Infra   │  Executes the transaction
+└─────────────────┘
 ```
 
 The agent proposes actions. The policy engine gates them. The wallet infrastructure executes what survives. This separation means you can deploy an agent with aggressive trading logic and still rest assured that the policy engine won't let it exceed its budget.
@@ -44,7 +44,7 @@ The agent proposes actions. The policy engine gates them. The wallet infrastruct
 - **One agent, one keypair.** No shared wallets. Every agent has a unique Solana keypair, its own policy, and its own audit trail.
 - **Gasless by default.** Agents shouldn't need SOL for fees. All transactions route through [Kora](https://launch.solana.com/docs/kora/operators), a gasless relayer that co-signs and pays fees.
 - **Policy is immutable from the agent's perspective.** Agents can read their policy but cannot modify it. Only the platform operator (via the REST API) can update policies.
-- **Every action is audited.** The audit log records every transaction attempt — successful or blocked — with the full policy evaluation result.
+- **Every action is audited.** The audit log records every transaction attempt, successful or blocked, with the full policy evaluation result.
 
 ---
 
@@ -54,10 +54,10 @@ Each agent's wallet has two layers:
 
 ### 1. Hot Keypair (Agent Wallet)
 
-- Generated at agent creation time via `solana-keygen`
+- Generated at agent creation time via `Keypair::new()` (Ed25519)
 - Encrypted at rest with AES-256-GCM using a server-side master key
 - Stored in SQLite (encrypted bytes + nonce)
-- Never exposed in API responses — only the public key is returned
+- Never exposed in API responses - only the public key is returned
 - Used to sign all transactions for this agent
 
 ### 2. Vault PDA (On-Chain Treasury)
@@ -120,12 +120,12 @@ The Python SDK provides three integration levels:
 **1. Direct client (programmatic):**
 
 ```python
-async with KlaveClient("http://localhost:3000", api_key="key") as c:
-    agent = await c.create_agent("trader", AgentPolicyInput(
+async with KlaveClient("http://localhost:3000", api_key="key") as client:
+    agent = await client.create_agent("trader", AgentPolicyInput(
         max_lamports_per_tx=500_000_000,
         token_allowlist=["So11...", "4zMM..."],
     ))
-    tx = await c.swap_tokens(agent.id, {
+    tx = await client.swap_tokens(agent.id, {
         "whirlpool": "...",
         "input_mint": "So11...",
         "amount": 10_000_000,
@@ -162,9 +162,9 @@ while True:
 
 | Concern        | Approach                                                                                |
 | -------------- | --------------------------------------------------------------------------------------- |
-| Key generation | `solana-keygen` — standard Ed25519 keypair                                              |
+| Key generation | `Keypair::new()` — standard Ed25519 keypair                                              |
 | Storage        | AES-256-GCM encrypted, SQLite                                                           |
-| Master key     | Derived from `KLAVE_MASTER_KEY` env var                                                 |
+| Master key     | Derived from `KLAVE_ENCRYPTION_KEY` env var                                              |
 | Key exposure   | Private keys never leave the server process. API responses only include the public key. |
 | Key rotation   | Delete agent + create new one. Keys are tied to agent identity.                         |
 
@@ -172,7 +172,8 @@ while True:
 
 - **Dual API Key Model**:
   - `KLAVE_OPERATOR_API_KEY`: Required for administrative operations (creating agents, deactivating, updating policies). The Python SDK exposes these via `build_operator_tools`.
-  - `KLAVE_API_KEY`: Used by agents for runtime operations (transactions, balance checks, history). The Python SDK provides a restricted `build_agent_tools` set for this.
+  - **Per-agent API key**: Auto-generated at agent creation, unique per agent, used for runtime operations (transactions, balance checks, history). Stored as a SHA-256 hash in the DB. The Python SDK provides a restricted `build_agent_tools` set for this.
+- **Constant-Time Comparison**: API keys are evaluated using constant-time string equality (`subtle::ConstantTimeEq`) in the Axum middleware to prevent timing attacks.
 - **Per-agent isolation**: An agent's keypair is loaded only when executing transactions for that specific agent.
 - **No cross-agent operations**: Agent A cannot sign with Agent B's key or access Agent B's vault.
 
@@ -192,7 +193,7 @@ Each layer is independent. Even if an agent's API key leaks, the policy engine s
 
 ## Multi-Agent Isolation
 
-KLAVE achieves multi-agent isolation through **resource partitioning**, not just namespacing:
+KLAVE achieves multi-agent isolation through **resource partitioning**:
 
 | Resource       | Isolation Method                                    |
 | -------------- | --------------------------------------------------- |
@@ -257,7 +258,8 @@ Every transaction follows a deterministic pipeline:
    └─ Fallback: direct RPC  — if Kora unavailable
 6. Broadcast to Solana      — submit to network
 7. Log to audit trail       — success or failure
-8. Return signature          — to caller
+8. Emit SSE events          — TransactionExecuted + BalanceUpdated (confirmed balances)
+9. Return signature          — to caller
 ```
 
 ### Kora Integration
@@ -349,7 +351,7 @@ We chose SQLite for the audit log and agent registry. At the scale of a devnet p
 
 ### Kora for Gasless TX
 
-Gasless transactions are non-negotiable for agent wallets. This requires agents to maintain SOL balances just for fees creates an operational overhead that defeats the purpose of autonomy. Kora provides this through fee-payer co-signing.
+Gasless transactions are non-negotiable for agent wallets. Requiring agents to maintain SOL balances just for fees creates operational overhead that defeats the purpose of autonomy. Kora provides this through fee-payer co-signing.
 
 ### Policy Engine as Static Evaluator
 
@@ -362,6 +364,10 @@ Agent private keys are encrypted at rest rather than stored in a hardware securi
 ### No Agent-Side Policy Modification
 
 Agents cannot modify their own policies by design. If an agent could relax its own spend limit, the policy system would be meaningless. Only the platform operator (human) can update policies via `PUT /api/v1/agents/{id}/policy`.
+
+### Runtime: Rust + Tokio
+
+**Custom Runtime Build**: We use a custom `tokio` multi-thread runtime builder to increase the thread stack size from the default 2MB to 8MB. This is a deliberate workaround because the Orca Whirlpool SDK's tick array traversal (used during quote generation and swap execution) is deeply recursive/stack-heavy and reliably overflows the default 2MB thread stack.
 
 ---
 

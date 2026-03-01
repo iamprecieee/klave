@@ -1,15 +1,19 @@
 # KLAVE
 
-**Agentic wallet infrastructure for Solana.** Create wallets for AI agents, enforce per-agent policies, execute gasless transactions, and swap tokens.
+**Agentic wallet infrastructure for Solana.** Create wallets for AI agents, enforce per-agent policies, execute gasless transactions.
+
+> [!WARNING]
+> **Prototype Software**
+> This project was built for the Superteam DeFi Developer Challenge. It is a proof-of-concept prototype and has **not** been audited. Do not use this in production or with mainnet funds.
 
 ## Highlights
 
-- **Multi-agent support** — each agent gets its own keypair, policy, and audit trail
-- **Gasless transactions** — all on-chain operations routed through [Kora](https://launch.solana.com/docs/kora/operators) (no SOL needed on agent's wallet for fees)
-- **Orca DeFi engine** — agents can swap tokens on Orca Whirlpools with policy-enforced slippage and volume limits
-- **Policy enforcement** — per-agent spend limits, program allowlists, token restrictions, and withdrawal destinations
-- **Live dashboard** — monitoring UI with real-time agent status and transaction feed
-- **Python SDK** — typed async client + LangChain tool wrappers for LLM-driven agents
+- **Multi-agent support** - Each agent gets its own keypair, policy, and audit trail
+- **Gasless transactions** - All on-chain operations routed through [Kora](https://launch.solana.com/docs/kora/operators). No SOL is needed on the agent's wallet for fees
+- **Orca DeFi engine** - Agents can swap tokens on Orca Whirlpools with policy-enforced slippage and volume limits
+- **Policy enforcement** - Per-agent spend limits, program allowlists, token restrictions, and withdrawal destinations
+- **Live dashboard** - Monitoring UI with real-time agent status and transaction feed
+- **Python SDK** - Typed async client + LangChain tool wrappers for LLM-driven agents
 
 ## Architecture
 
@@ -21,7 +25,8 @@ graph LR
     Kora --> Solana
     Server -->|SQLite| DB["Audit Log"]
     Server -->|CPI| Treasury["Anchor Treasury<br/>Program"]
-    Dashboard["Dashboard<br/>:8888"] -->|Poll API| Server
+    Server -->|SSE Push| Dashboard["Dashboard<br/>:8888"]
+    Agent -.->|/notify API| Server
 ```
 
 For a deep dive into the design philosophy, security model, and agent interaction patterns, see [DEEP_DIVE.md](DEEP_DIVE.md).
@@ -37,10 +42,11 @@ Install these before starting:
 | [Rust](https://rustup.rs/)                                  | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh`                                     | Builds the server and CLI                       |
 | [Solana CLI](https://docs.solanalabs.com/cli/install)       | `sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"`                                       | Keypair management, devnet interaction          |
 | [Anchor CLI](https://www.anchor-lang.com/docs/installation) | `cargo install --git https://github.com/coral-xyz/anchor avm && avm install latest && avm use latest` | Deploy the on-chain treasury program (optional) |
-| [Kora](https://launch.solana.com/docs/kora/operators)       | `cargo install kora`                                                                                  | Gasless transaction relayer                     |
+| [Kora](https://launch.solana.com/docs/kora/operators)       | `cargo install kora-cli`                                                                              | Gasless transaction relayer                     |
 | Python 3.10+                                                | [python.org](https://www.python.org/downloads/)                                                       | Run the SDK and multi-agent demo                |
 
-Make sure you have a Solana keypair configured:
+> [!WARNING]
+> Make sure you have a Solana keypair configured if you plan to deploy the on-chain treasury program:
 
 ```bash
 solana-keygen new          # skip if you already have one
@@ -52,35 +58,34 @@ solana config set --url devnet
 ## Quick Start
 
 ```bash
-# 1. Clone
+# Clone
 git clone https://github.com/iamprecieee/klave.git && cd klave
 
-# 2. Install the CLI
+# Install the CLI
 cargo install --path ./klave-cli
 
-# 3. Initialize — generates .env with all secrets (JUPITER_API_KEY and LLM keys (optional) should be set manually)
+# Initialize - generates .env with all secrets (JUPITER_API_KEY and LLM keys (optional) should be set manually)
 klave init
 
-# 4. Deploy the treasury program to devnet (optional)
+# Deploy the treasury program to devnet (optional)
 klave deploy
 
-# 5. Fund the Kora fee-payer (devnet). If CLI airdrop fails, use https://faucet.solana.com/ with the pubkey printed below:
+# Fund the Kora fee-payer (devnet). If CLI airdrop fails, use https://faucet.solana.com/ with the pubkey printed below:
 solana airdrop 2 $(grep KORA_PUBKEY .env | cut -d= -f2) --url devnet
 
-# 6. Start everything
+# Start klave server, kora relayer and dashboard
 klave start --with-kora --dashboard
 ```
 
-[!IMPORTANT]
-The Treasury Program ID `H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex` is hardcoded in several critical locations for security whitelisting. If you re-deploy to a different ID, you **must** update it in:
+> [!IMPORTANT]
+> The Treasury Program ID `H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex` is hardcoded in several critical locations for security whitelisting. If you re-deploy to a different ID, you **must** update it in:
+>- **On-chain**: `klave-anchor/programs/klave-anchor/src/lib.rs` and `klave-anchor/Anchor.toml`
+>- **Server**: `klave-core/src/agent/model.rs` (the `TREASURY_PROGRAM_ID` constant)
+>- **SDK/Demo**: `sdk/klave/models.py`
+>- **Relayer**: `kora.example.toml` (if using Kora)
+>- **Docs**: `SKILLS.md`, `REGISTER.md`, and `HEARTBEAT.md` (to keep agent context accurate)
 
-- **On-chain**: `klave-anchor/programs/klave-anchor/src/lib.rs` and `klave-anchor/Anchor.toml`
-- **Server**: `klave-core/src/agent/model.rs` (the `TREASURY_PROGRAM_ID` constant)
-- **SDK/Demo**: `sdk/klave/models.py`
-- **Relayer**: `kora.example.toml` (if using Kora)
-- **Docs**: `SKILLS.md`, `REGISTER.md`, and `HEARTBEAT.md` (to keep agent context accurate)
-
-The server is now running:
+The services should be running on:
 
 | Service          | URL                   |
 | ---------------- | --------------------- |
@@ -114,14 +119,14 @@ cd ..
 
 # 2. Run the autonomous heartbeat cycle
 # Registration is public; the agent registers itself if no key is provided.
-# The Operator Key is used to initially fund the agent and sync its policy.
+# The Operator Key is used to sync its policies (simulates a human operator).
 uv run --active klave-sdk-demo \
     --operator-key $(grep KLAVE_OPERATOR_API_KEY .env | cut -d= -f2)
 ```
 
 The demo will print the agent's public key for funding if it has less than 0.05 SOL. Use the [Solana Faucet](https://faucet.solana.com/) to fund it if needed.
 
-Open http://localhost:8888?key=<klave-api-key> to watch the agents in real time on the dashboard.
+Open http://localhost:8888 to watch the agents in real time on the dashboard. You will be required to enter your operator key on initial load.
 
 ---
 
@@ -133,7 +138,7 @@ klave start                             # Build + start klave-server only
 klave start --with-kora                 # Also start Kora gasless relayer
 klave start --dashboard                 # Also serve dashboard on :8888
 klave start --with-kora --dashboard     # Everything
-klave start --release                   # Production build
+klave start --release                   # Production build (caution advised)
 klave deploy                            # anchor build + deploy to devnet
 klave deploy --cluster localnet         # Deploy to localnet
 ```
@@ -144,23 +149,22 @@ klave deploy --cluster localnet         # Deploy to localnet
 
 ```
 klave/
-├── klave-cli/          # CLI binary (init, start, deploy)
-├── klave-core/         # Core library (agent registry, policy engine, audit, Kora gateway, Orca client)
-├── klave-server/       # Axum HTTP server (handlers, router, middleware)
-├── klave-anchor/       # Anchor treasury program (initialize_vault, deposit, withdraw)
-├── sdk/                # Python SDK + multi-agent demo
-│   ├── klave/          # KlaveClient, models, LangChain tools
-│   ├── demo/           # multi_agent_demo.py
-│   └── tests/
-├── dashboard/          # Single-file HTML monitoring UI
+├── klave-cli/           # CLI binary (init, start, deploy)
+├── klave-core/          # Core library (agent registry, policy engine, audit, Kora gateway, Orca client)
+├── klave-server/        # Axum HTTP server (handlers, router, middleware)
+├── klave-anchor/        # Anchor treasury program (initialize_vault, deposit, withdraw)
+├── sdk/                 # Python SDK + multi-agent demo
+│   ├── klave/           # KlaveClient, models, LangChain tools
+│   └── demo/            # multi_agent_demo.py
+├── dashboard/           # Frontend monitoring UI
 ├── docs/
-│   ├── README.md       # This file
-│   ├── SKILLS.md       # Agent-facing API reference
-│   ├── DEEP_DIVE.md    # Design deep dive (security, architecture, trade-offs)
-│   ├── REGISTER.md     # Agent self-onboarding playbook
-│   └── HEARTBEAT.md    # Autonomous decision flowchart
-├── .env.example        # Environment template
-├── kora.example.toml   # Kora relayer configuration template
+│   ├── README.md        # This file
+│   ├── SKILLS.md        # Agent-facing API reference
+│   ├── DEEP_DIVE.md     # Design deep dive (security, architecture, trade-offs)
+│   ├── REGISTER.md      # Agent self-onboarding playbook
+│   └── HEARTBEAT.md     # Autonomous decision flowchart
+├── .env.example         # Environment template
+├── kora.example.toml    # Kora relayer configuration template
 └── signers.example.toml # Kora signer pool template
 ```
 
