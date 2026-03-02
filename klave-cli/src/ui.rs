@@ -113,7 +113,7 @@ pub fn flow_box(title: &str, rows: &[(&str, &str)]) {
         );
         // Raw length for padding (without ANSI codes)
         let raw_len = key.len() + 2 + value.len();
-        let pad = if inner > raw_len { inner - raw_len } else { 0 };
+        let pad = inner.saturating_sub(raw_len);
         println!(
             "{}  {}{}{}",
             style("│").color256(AMBER),

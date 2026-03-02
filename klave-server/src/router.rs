@@ -36,10 +36,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/agents/{id}/balance", get(agents::get_agent_balance))
         .route("/agents/{id}/tokens", get(agents::get_agent_token_balances))
         .route("/agents/{id}/notify", post(agents::notify_balance_updated))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            api_key_auth.clone(),
-        ));
+        .layer(middleware::from_fn_with_state(state.clone(), api_key_auth));
 
     let agent_only_routes = Router::new()
         .route(

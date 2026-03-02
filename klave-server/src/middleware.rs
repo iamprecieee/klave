@@ -49,16 +49,15 @@ pub async fn api_key_auth(
             }
 
             if let Ok(Some(agent)) = state.agent_repo.find_by_key_hash(key).await {
-                if is_agent_path {
-                    if let Some(ref path_id) = id_from_path {
-                        if path_id != &agent.id {
-                            return ApiResponse::<()>::error(
-                                StatusCode::FORBIDDEN,
-                                "Forbidden: Agent ID mismatch",
-                            )
-                            .into_response();
-                        }
-                    }
+                if is_agent_path
+                    && let Some(ref path_id) = id_from_path
+                    && path_id != &agent.id
+                {
+                    return ApiResponse::<()>::error(
+                        StatusCode::FORBIDDEN,
+                        "Forbidden: Agent ID mismatch",
+                    )
+                    .into_response();
                 }
 
                 request.extensions_mut().insert(AuthContext {

@@ -368,14 +368,21 @@ pub async fn execute_transaction(
     let usd_value = state.price_feed.lamports_to_usd(payload_amount).await;
     write_audit_entry(
         state.clone(),
-        agent.id,
-        policy_req.instruction_type,
+        agent.id.clone(),
+        policy_req.instruction_type.clone(),
         "confirmed".to_string(),
         tx_sig.to_string(),
         payload_amount,
         usd_value,
     )
     .await;
+
+    tracing::info!(
+        agent_id = %agent.id,
+        instruction = ?policy_req.instruction_type,
+        signature = %tx_sig,
+        "Transaction executed successfully"
+    );
 
     let tx_sig_str = tx_sig.to_string();
     let _ = state.event_tx.send(ServerEvent::TransactionExecuted {
@@ -386,8 +393,6 @@ pub async fn execute_transaction(
     {
         let state = state.clone();
         let agent_id = agent_id.clone();
-        let agent_pubkey = agent_pubkey;
-        let vault_pda = vault_pda;
         let sig = tx_sig;
         tokio::spawn(async move {
             state.kora_gateway.confirm_transaction(&sig).await;

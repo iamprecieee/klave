@@ -8,10 +8,9 @@ const CONFIG = {
 };
 
 const STATE = {
-  agents: {}, // map of agentId -> lastKnownData
+  agents: {},
   txSignatures: new Set(),
   isPolling: false,
-  eventSource: null,
   abortController: null,
 };
 
@@ -48,6 +47,16 @@ const fmtTime = (ts) => {
 const fmtClock = () =>
   new Date().toLocaleTimeString("en-GB", { hour12: false });
 
+const escapeHtml = (unsafe) => {
+  return (unsafe || "")
+    .toString()
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
+
 function createAgentElement(agent, bal, toks) {
   const init = (agent.label || "AG").slice(0, 2).toUpperCase();
   const sol = bal ? lamportsToSol(bal.sol_lamports) : null;
@@ -76,12 +85,12 @@ function createAgentElement(agent, bal, toks) {
   div.innerHTML = `
     <div class="agent-top">
       <div class="agent-id">
-        <div class="agent-avatar">${init}</div>
-        <span class="agent-name">${agent.label || "Unnamed"}</span>
+        <div class="agent-avatar">${escapeHtml(init)}</div>
+        <span class="agent-name">${escapeHtml(agent.label || "Unnamed")}</span>
       </div>
       <span class="pill status-pill ${agent.is_active ? "online" : "offline"}">${agent.is_active ? "Online" : "Offline"}</span>
     </div>
-    <div class="agent-key">${agent.pubkey}</div>
+    <div class="agent-key">${escapeHtml(agent.pubkey)}</div>
     <div class="agent-grid">
       <div class="metric">
         <div class="metric-label">SOL</div>
@@ -98,14 +107,12 @@ function createAgentElement(agent, bal, toks) {
 }
 
 function updateAgentElement(el, agent, bal, toks) {
-  // Update status pill
   const pill = el.querySelector(".status-pill");
   if (pill) {
     pill.className = `pill status-pill ${agent.is_active ? "online" : "offline"}`;
     pill.textContent = agent.is_active ? "Online" : "Offline";
   }
 
-  // Update balances
   const sol = bal ? lamportsToSol(bal.sol_lamports) : null;
   const vault = bal ? lamportsToSol(bal.vault_lamports) : null;
 
@@ -129,7 +136,6 @@ function updateAgentElement(el, agent, bal, toks) {
     }
   }
 
-  // Update tokens (simple replace for now if count changes or first 3 change)
   const tokenList = el.querySelector(".token-list");
   if (tokenList && toks) {
     const rows = toks
@@ -155,14 +161,12 @@ function renderAgents(agents, balances, tokens) {
     return;
   }
 
-  // Remove skeleton or empty state if present
   if (container.querySelector(".skel") || container.querySelector(".empty")) {
     container.innerHTML = "";
   }
 
   const currentIds = new Set(agents.map((a) => a.id));
 
-  // Remove agents no longer present
   Object.keys(STATE.agents).forEach((id) => {
     if (!currentIds.has(id)) {
       const el = document.getElementById(`agent-${id}`);
@@ -171,7 +175,6 @@ function renderAgents(agents, balances, tokens) {
     }
   });
 
-  // Add or update agents
   agents.forEach((agent) => {
     const el = document.getElementById(`agent-${agent.id}`);
     const bal = balances[agent.id];
@@ -196,10 +199,10 @@ function renderTx(e) {
   const li = document.createElement("li");
   li.className = "tx";
   li.innerHTML = `
-            <span class="tx-type ${cls}">${e.instruction_type || "unknown"}</span>
+            <span class="tx-type ${escapeHtml(cls)}">${escapeHtml((e.instruction_type || "unknown").replace(/_/g, " "))}</span>
             <div class="tx-detail">
               <div class="tx-sig">${sig}</div>
-              <div class="tx-agent">${truncate(e.agent_id, 4)}</div>
+              <div class="tx-agent">${escapeHtml(truncate(e.agent_id, 4))}</div>
             </div>
             <span class="tx-result ${e.status}">${e.status}</span>
             <span class="tx-when"><span class="tx-when-date">${date}</span>${time}</span>
@@ -218,11 +221,9 @@ function renderFeed(entries) {
     return;
   }
 
-  // Remove empty state
   const empty = el.querySelector(".empty");
   if (empty) empty.remove();
 
-  // Prepend new transactions
   const newEntries = entries.filter((e) => {
     const key = e.tx_signature || `audit-${e.id}`;
     return !STATE.txSignatures.has(key);
@@ -233,7 +234,6 @@ function renderFeed(entries) {
     STATE.txSignatures.add(key);
   });
 
-  // Limit feed to 50 items and prune the signature set
   while (el.children.length > 50) {
     const last = el.lastElementChild;
     if (!last) break;
@@ -253,7 +253,6 @@ const urlKey = new URLSearchParams(window.location.search).get("key");
 if (urlKey) {
   API_KEY = urlKey;
   localStorage.setItem("klave_operator_key", API_KEY);
-  // Clean URL to avoid leaking in history
   window.history.replaceState({}, document.title, window.location.pathname);
 }
 
@@ -296,9 +295,7 @@ async function poll() {
           balances[a.id] = bal;
           tokens[a.id] = tok;
           entries.push(...hist);
-        } catch (e) {
-          console.warn("agent fetch error:", e);
-        }
+        } catch { /* skip failed agent */ }
       }),
     );
 
@@ -310,7 +307,6 @@ async function poll() {
     dot.classList.remove("offline");
     txt.textContent = `Live \u00b7 ${agents.length} agent${agents.length !== 1 ? "s" : ""} \u00b7 ${fmtClock()}`;
   } catch (err) {
-    console.error("poll error:", err);
     dot.classList.add("offline");
     txt.textContent = "Offline \u2014 " + err.message;
   } finally {
@@ -330,13 +326,10 @@ async function connectSSE() {
   const headers = { Accept: "text/event-stream" };
   if (API_KEY) headers["x-api-key"] = API_KEY;
 
-  console.log("Connecting to SSE (via fetch)...");
-
   try {
     const response = await fetch(url.toString(), { headers, signal });
     if (!response.ok) {
       if (response.status === 401) {
-        console.error("SSE Unauthorized. Check your API key.");
         document.getElementById("statusDot").classList.add("offline");
         document.getElementById("statusText").textContent =
           "Unauthorized (Invalid Key)";
@@ -345,7 +338,6 @@ async function connectSSE() {
       throw new Error(`HTTP ${response.status}`);
     }
 
-    console.log("SSE connected");
     document.getElementById("statusDot").classList.remove("offline");
     document.getElementById("statusText").textContent =
       "Live (SSE) \u00b7 " + fmtClock();
@@ -369,18 +361,14 @@ async function connectSSE() {
             const json = dataLine.slice(5).trim();
             if (json) {
               const { type, data } = JSON.parse(json);
-              console.log("SSE Event:", type, data);
               handleServerEvent(type, data);
             }
-          } catch (e) {
-            console.error("SSE JSON error:", e);
-          }
+          } catch { /* malformed SSE data */ }
         }
       }
     }
   } catch (err) {
     if (err.name === "AbortError") return;
-    console.warn("SSE connection error, retrying in 5s...", err);
     document.getElementById("statusDot").classList.add("offline");
     setTimeout(connectSSE, 5000);
   }
@@ -393,14 +381,10 @@ async function handleServerEvent(type, data) {
       break;
     case "TransactionExecuted":
       if (data.agent_id) {
-        try {
-          const hist = await fetchJson(
-            `/api/v1/agents/${data.agent_id}/history`,
-          ).catch(() => []);
-          if (hist.length) renderFeed(hist);
-        } catch (e) {
-          console.warn("SSE history fetch error:", e);
-        }
+        const hist = await fetchJson(
+          `/api/v1/agents/${data.agent_id}/history`,
+        ).catch(() => []);
+        if (hist.length) renderFeed(hist);
       }
       break;
     case "BalanceUpdated":
@@ -417,29 +401,23 @@ async function handleServerEvent(type, data) {
             updateAgentElement(el, agent, bal, tok);
           }
         }
-        try {
-          const hist = await fetchJson(
-            `/api/v1/agents/${data.agent_id}/history`,
-          ).catch(() => []);
-          if (hist.length) renderFeed(hist);
-        } catch (_) { }
+        const hist = await fetchJson(
+          `/api/v1/agents/${data.agent_id}/history`,
+        ).catch(() => []);
+        if (hist.length) renderFeed(hist);
       }
       break;
     case "Message":
-      console.log("Server message:", data.text);
       break;
   }
 }
 
-// Initial load
 poll().then(() => {
   connectSSE();
 });
 
-// Update health link
 document.getElementById("healthLink").href = CONFIG.baseUrl + "/health";
 
-// Theme Toggle
 const themeToggle = document.getElementById("themeToggle");
 const body = document.body;
 

@@ -76,45 +76,44 @@ impl KoraGateway {
 
         let mut balances = Vec::new();
         for keyed_account in accounts {
-            if let UiAccountData::Json(parsed) = keyed_account.account.data {
-                if parsed.program == "spl-token"
-                    && parsed.parsed.get("type").and_then(|t| t.as_str()) == Some("account")
-                {
-                    let info = parsed
-                        .parsed
-                        .get("info")
-                        .ok_or_else(|| KlaveError::Internal("Missing info".into()))?;
-                    let mint = info
-                        .get("mint")
-                        .and_then(|m| m.as_str())
-                        .unwrap_or_default()
-                        .to_string();
-                    let token_amount = info
-                        .get("tokenAmount")
-                        .ok_or_else(|| KlaveError::Internal("Missing tokenAmount".into()))?;
+            if let UiAccountData::Json(parsed) = keyed_account.account.data
+                && parsed.program == "spl-token"
+                && parsed.parsed.get("type").and_then(|t| t.as_str()) == Some("account")
+            {
+                let info = parsed
+                    .parsed
+                    .get("info")
+                    .ok_or_else(|| KlaveError::Internal("Missing info".into()))?;
+                let mint = info
+                    .get("mint")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let token_amount = info
+                    .get("tokenAmount")
+                    .ok_or_else(|| KlaveError::Internal("Missing tokenAmount".into()))?;
 
-                    let amount_str = token_amount
-                        .get("amount")
-                        .and_then(|a| a.as_str())
-                        .unwrap_or("0");
-                    let amount = amount_str.parse().unwrap_or(0);
-                    let decimals = token_amount
-                        .get("decimals")
-                        .and_then(|d| d.as_u64())
-                        .unwrap_or(0) as u8;
-                    let ui_amount = token_amount
-                        .get("uiAmount")
-                        .and_then(|u| u.as_f64())
-                        .unwrap_or(0.0);
+                let amount_str = token_amount
+                    .get("amount")
+                    .and_then(|a| a.as_str())
+                    .unwrap_or("0");
+                let amount = amount_str.parse().unwrap_or(0);
+                let decimals = token_amount
+                    .get("decimals")
+                    .and_then(|d| d.as_u64())
+                    .unwrap_or(0) as u8;
+                let ui_amount = token_amount
+                    .get("uiAmount")
+                    .and_then(|u| u.as_f64())
+                    .unwrap_or(0.0);
 
-                    if amount > 0 {
-                        balances.push(TokenBalance {
-                            mint,
-                            amount,
-                            decimals,
-                            ui_amount,
-                        });
-                    }
+                if amount > 0 {
+                    balances.push(TokenBalance {
+                        mint,
+                        amount,
+                        decimals,
+                        ui_amount,
+                    });
                 }
             }
         }
@@ -155,28 +154,27 @@ impl KoraGateway {
                         .and_then(|r| r.get("signed_transaction"))
                         .and_then(|s| s.as_str())
                     {
-                        if let Ok(bytes) = general_purpose::STANDARD.decode(signed_b64) {
-                            if let Ok(fully_signed_tx) =
+                        if let Ok(bytes) = general_purpose::STANDARD.decode(signed_b64)
+                            && let Ok(fully_signed_tx) =
                                 bincode::deserialize::<ClientVersionedTransaction>(&bytes)
+                        {
+                            match self
+                                .rpc_client
+                                .send_transaction_with_config(
+                                    &fully_signed_tx,
+                                    RpcSendTransactionConfig {
+                                        skip_preflight: true,
+                                        ..Default::default()
+                                    },
+                                )
+                                .await
                             {
-                                match self
-                                    .rpc_client
-                                    .send_transaction_with_config(
-                                        &fully_signed_tx,
-                                        RpcSendTransactionConfig {
-                                            skip_preflight: true,
-                                            ..Default::default()
-                                        },
-                                    )
-                                    .await
-                                {
-                                    Ok(sig) => return Ok((sig, true)),
-                                    Err(e) => {
-                                        return Err(KlaveError::Internal(format!(
-                                            "Failed to broadcast Kora-signed tx: {}",
-                                            e
-                                        )));
-                                    }
+                                Ok(sig) => return Ok((sig, true)),
+                                Err(e) => {
+                                    return Err(KlaveError::Internal(format!(
+                                        "Failed to broadcast Kora-signed tx: {}",
+                                        e
+                                    )));
                                 }
                             }
                         }
@@ -229,10 +227,10 @@ impl KoraGateway {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             match self.rpc_client.get_signature_statuses(&[*signature]).await {
                 Ok(response) => {
-                    if let Some(Some(status)) = response.value.first() {
-                        if status.err.is_none() {
-                            return true;
-                        }
+                    if let Some(Some(status)) = response.value.first()
+                        && status.err.is_none()
+                    {
+                        return true;
                     }
                 }
                 Err(_) => continue,

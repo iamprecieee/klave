@@ -85,7 +85,7 @@ pub async fn list_agents(
         }
     } else if let Some(agent_id) = auth.agent_id {
         match state.agent_repo.find_by_id(&agent_id).await {
-            Ok(Some(agent)) => match serde_json::to_value(&vec![agent]) {
+            Ok(Some(agent)) => match serde_json::to_value(vec![agent]) {
                 Ok(val) => ApiResponse::success(val, "agent retrieved").into_response(),
                 Err(e) => {
                     ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())

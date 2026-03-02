@@ -256,7 +256,6 @@ pub async fn execute_swap(
     {
         let state = state.clone();
         let agent_id = agent.id.clone();
-        let agent_pubkey = agent_pubkey;
         let program_id = Pubkey::new_from_array(klave_anchor::ID.to_bytes());
         let (vault_pda, _) =
             Pubkey::find_program_address(&[b"vault", agent_pubkey.as_ref()], &program_id);
@@ -313,7 +312,7 @@ pub async fn get_swap_quote(
     let agent = match state.agent_repo.find_by_id(&id).await {
         Ok(Some(a)) => a,
         Ok(None) => return ApiResponse::error(StatusCode::NOT_FOUND, "agent not found"),
-        Err(e) => return ApiResponse::error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => return ApiResponse::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
 
     let agent_pubkey = match Pubkey::from_str(&agent.pubkey) {

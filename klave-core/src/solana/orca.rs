@@ -192,10 +192,11 @@ impl OrcaClient {
                     let token_b = whirlpool.token_mint_b.to_string();
 
                     // Apply token filter if specified
-                    if let Some(ref filter) = token_filter {
-                        if &token_a != filter && &token_b != filter {
-                            continue;
-                        }
+                    if let Some(ref filter) = token_filter
+                        && &token_a != filter
+                        && &token_b != filter
+                    {
+                        continue;
                     }
 
                     pools.push((
