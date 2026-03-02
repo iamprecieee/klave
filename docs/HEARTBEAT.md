@@ -1,123 +1,41 @@
 # KLAVE Heartbeat Playbook
 
-Execute this cycle every 2-5 minutes to maintain your autonomous presence and infrastructure health.
+Run this cycle every 2–5 minutes. The agent manages its own vault, rebalances tokens, and reports to the dashboard — all within policy.
 
-## Decision Flowchart
+This playbook is runtime-agnostic. Whether your agent is driven by OpenClaw, LangChain, cron, or a custom loop, the logic and API calls are the same.
+
+## Rate Limits
+
+60 requests / 60 seconds per API key. A typical cycle uses 3–6 requests. If you hit a `429`, wait 60 seconds.
+
+---
+
+## Flowchart
 
 ```
-1. Check Sync
-   └─ credentials.json missing? → Run docs/REGISTER.md
-          │
-2. Check Infrastructure
-   └─ GET /health fails? → Alert operator, abort cycle
-          │
-3. Check Balance
-   └─ GET /api/v1/agents/{id}/balance
-          │
-4. Analyze Funds
-   ├─ sol_lamports > 0.1 SOL?
-   │     └─ Vault not initialized? → POST transactions { instruction_type: "initialize_vault" }
-   │     └─ Deposit 30% into vault → POST transactions { instruction_type: "deposit_to_vault", amount: ... }
-   ├─ sol_lamports > 0.05 SOL?
-   │     └─ Swap 1/3 of SOL balance into USDC
-   ├─ sol_lamports < 0.01 SOL?
-   │     └─ Withdraw 30% from vault → POST transactions { instruction_type: "withdraw_from_vault", amount: ... }
-   ├─ vault_lamports > 90% of sol_lamports?
-   │     └─ Withdraw 50% of vault → POST transactions { instruction_type: "withdraw_from_vault", amount: ... }
-   └─ (Else) → Proceed to Token Rebalancing
-          │
-5. Check Token Positions
-   └─ GET /api/v1/agents/{id}/tokens
-   └─ Rebalance needed? (Strategy: Core Stability)
-         ├─ SOL balance > 0.05 SOL? → Swap 1/3 of SOL balance into USDC
-         ├─ SOL balance < USDC balance? → Swap 50% of USDC back to SOL
-         └─ Action Cycle: Discover Pool → Get Quote → Swap
-          │
-6. Log
-   └─ Record action in $STATE_DIR/heartbeat.json
+┌─ Check Health ─────────────── GET /health
+│   └─ Fails? → log error, abort cycle
+│
+├─ Check Balance ────────────── GET /agents/{id}/balance
+│   ├─ < 0.01 SOL → withdraw from vault if possible, alert operator
+│   ├─ > 0.1 SOL  → vault not initialized? → initialize, then deposit 30%
+│   ├─ > 0.05 SOL → swap 1/3 SOL → USDC
+│   └─ vault > 90% of SOL balance → withdraw 50% of vault
+│
+├─ Token Rebalance ──────────── GET /agents/{id}/tokens
+│   ├─ SOL > 0.05 → swap 1/3 → USDC
+│   └─ SOL < USDC → swap 50% USDC → SOL
+│
+├─ Notify Dashboard ─────────── POST /agents/{id}/notify
+│
+└─ Update State ─────────────── write heartbeat.json (or equivalent)
 ```
 
-## API Calls
+---
 
-### Check health
+## State Tracking
 
-```bash
-GET /health
-```
-
-### Check SOL + vault balance
-
-```bash
-GET /api/v1/agents/{id}/balance
-X-API-Key: <key>
-# → { "sol_lamports": 200000000, "vault_lamports": 50000000 }
-```
-
-### Check token balances
-
-```bash
-GET /api/v1/agents/{id}/tokens
-X-API-Key: <key>
-# → [{ "mint": "...", "amount": 1000000, "decimals": 6, "ui_amount": 1.0 }]
-```
-
-### Deposit to vault
-
-```bash
-POST /api/v1/agents/{id}/transactions
-Content-Type: application/json
-X-API-Key: <key>
-
-{ "instruction_type": "deposit_to_vault", "amount": 30000000 }
-```
-
-### Withdraw from vault
-
-```bash
-POST /api/v1/agents/{id}/transactions
-Content-Type: application/json
-X-API-Key: <key>
-
-{ "instruction_type": "withdraw_from_vault", "amount": 25000000 }
-```
-
-### Swap tokens
-
-```bash
-POST /api/v1/agents/{id}/orca/swap
-Content-Type: application/json
-X-API-Key: <key>
-
-{ "whirlpool": "<pool-address>", "input_mint": "So11...", "amount": 10000000 }
-```
-
-### Notify dashboard (after external deposits)
-
-```bash
-POST /api/v1/agents/{id}/notify
-X-API-Key: <key>
-# → 204 No Content — triggers dashboard refresh
-```
-
-## Prerequisites
-
-Your agent's policy must include the programs needed for each action:
-
-| Action           | Required `allowed_programs`                                                        |
-| ---------------- | ---------------------------------------------------------------------------------- |
-| SOL transfers    | `11111111111111111111111111111111`                                                 |
-| Vault operations | `11111111111111111111111111111111`, `H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex` |
-| Token swaps      | `11111111111111111111111111111111`, `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc`  |
-
-## Error Handling
-
-If an action returns a **403 Policy Violation**, the agent must:
-
-1.  **Identify**: Extract the missing program ID or destination from the error message (e.g., `program not in allowlist: GCU8...`).
-2.  **Alert**: Record the violation in the `errors` count in `heartbeat.json` and notify the operator system.
-3.  **Halt**: Suspend this part of the cycle until an operator updates the policy via the **Operator API**.
-
-## State Schema (`heartbeat.json`)
+Track cycle results so your agent knows what it did last. For filesystem agents, write to `$KLAVE_STATE_DIR/heartbeat.json`:
 
 ```json
 {
@@ -129,3 +47,106 @@ If an action returns a **403 Policy Violation**, the agent must:
   "errors": 0
 }
 ```
+
+If your runtime uses a database, env vars, or in-memory state, store the equivalent fields however makes sense.
+
+---
+
+## API Calls
+
+### Health
+
+```bash
+GET /health
+```
+
+### SOL + Vault Balance
+
+```bash
+GET /api/v1/agents/{id}/balance
+X-API-Key: <key>
+# → { "sol_lamports": 200000000, "vault_lamports": 50000000 }
+```
+
+### Token Balances
+
+```bash
+GET /api/v1/agents/{id}/tokens
+X-API-Key: <key>
+# → [{ "mint": "...", "amount": 1000000, "decimals": 6, "ui_amount": 1.0 }]
+```
+
+### Vault Deposit
+
+```bash
+POST /api/v1/agents/{id}/transactions
+Content-Type: application/json
+X-API-Key: <key>
+
+{ "instruction_type": "deposit_to_vault", "amount": 30000000 }
+```
+
+### Vault Withdrawal
+
+```bash
+POST /api/v1/agents/{id}/transactions
+Content-Type: application/json
+X-API-Key: <key>
+
+{ "instruction_type": "withdraw_from_vault", "amount": 25000000 }
+```
+
+### Swap Tokens
+
+```bash
+POST /api/v1/agents/{id}/orca/swap
+Content-Type: application/json
+X-API-Key: <key>
+
+{ "whirlpool": "<pool-address>", "input_mint": "So11...", "amount": 10000000 }
+```
+
+### Notify Dashboard
+
+```bash
+POST /api/v1/agents/{id}/notify
+X-API-Key: <key>
+# → 204 No Content
+```
+
+---
+
+## Required Programs
+
+| Action           | `allowed_programs`                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| SOL transfers    | `11111111111111111111111111111111`                                                 |
+| Vault operations | `11111111111111111111111111111111`, `H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex` |
+| Token swaps      | `11111111111111111111111111111111`, `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc`  |
+
+---
+
+## Error Handling
+
+**403 Policy Violation** — the transaction touched a program or destination not in the agent's allowlist.
+
+1. Extract the offending ID from the error.
+2. Record the violation in `errors` count.
+3. Stop that action until an operator updates the policy via `PUT /agents/{id}/policy`.
+
+**429 Rate Limited** — back off for 60 seconds, increment error count.
+
+**5xx Server Error** — log and retry next cycle.
+
+---
+
+## Operator Alerts
+
+Alert when:
+
+- Balance drops below 0.01 SOL
+- Policy violation blocks a required action
+- 3+ consecutive cycle errors
+- Vault operation fails on-chain
+
+Skip alerts for routine deposits, successful swaps, and passing balance checks.

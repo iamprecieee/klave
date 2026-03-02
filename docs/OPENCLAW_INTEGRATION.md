@@ -7,7 +7,7 @@ Follow these steps to connect your OpenClaw agent to your local Klave server.
 Your agent needs the Klave skill definition. Run these commands locally:
 
 ```bash
-export OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
+export OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw/workspace}"
 mkdir -p "$OPENCLAW_STATE_DIR/klave"
 cp docs/SKILLS.md "$OPENCLAW_STATE_DIR/klave/skill.md"
 cp docs/REGISTER.md "$OPENCLAW_STATE_DIR/klave/register.md"
@@ -18,11 +18,12 @@ cp docs/HEARTBEAT.md "$OPENCLAW_STATE_DIR/klave/heartbeat.md"
 
 Give your OpenClaw agent this prompt:
 
-> I have installed the `klave` skill in your state directory. Please read `klave/skill.md` and follow the `klave/register.md` playbook to create your wallet. Once you have a public key, provide it to me so I can fund it on devnet. Add the `klave/heartbeat.md` entry to your workspace `HEARTBEAT.md`. After funding, you should follow the `klave/heartbeat.md` cycle for autonomous operations.
+> I have installed the `klave` skill in your state directory - `$HOME/.openclaw/workspace/klave`. Please read `klave/skill.md` and follow the `klave/register.md` playbook to create your wallet. Once you have a public key, provide it to me so I can fund it on devnet. Add the `klave/heartbeat.md` entry to your workspace `HEARTBEAT.md`. After funding, you should follow the `klave/heartbeat.md` cycle for autonomous operations.
 
 ## 3. Funding (Manual Step)
 
 When the agent gives you its public key:
+
 ```bash
 solana airdrop 2 <AGENT_PUBKEY> --url devnet
 ```
