@@ -143,7 +143,7 @@ pub async fn get_agent_history(
             .into_response();
     }
     let agent = match state.agent_repo.find_by_id(&id).await {
-        Ok(Some(a)) => a,
+        Ok(Some(agent)) => agent,
         Ok(None) => {
             return ApiResponse::<()>::error(
                 StatusCode::NOT_FOUND,
@@ -186,7 +186,7 @@ pub async fn get_agent_balance(
             .into_response();
     }
     let agent = match state.agent_repo.find_by_id(&id).await {
-        Ok(Some(a)) => a,
+        Ok(Some(agent)) => agent,
         Ok(None) => {
             return ApiResponse::<()>::error(
                 StatusCode::NOT_FOUND,
@@ -313,7 +313,7 @@ pub async fn get_agent_token_balances(
             .into_response();
     }
     let agent = match state.agent_repo.find_by_id(&id).await {
-        Ok(Some(a)) => a,
+        Ok(Some(agent)) => agent,
         Ok(None) => {
             return ApiResponse::<()>::error(
                 StatusCode::NOT_FOUND,
@@ -368,7 +368,7 @@ pub async fn notify_balance_updated(
     }
 
     let agent = match state.agent_repo.find_by_id(&id).await {
-        Ok(Some(a)) => a,
+        Ok(Some(agent)) => agent,
         Ok(None) => {
             return ApiResponse::<()>::error(StatusCode::NOT_FOUND, "agent not found")
                 .into_response();

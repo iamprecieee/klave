@@ -19,7 +19,7 @@ impl Config {
                 .unwrap_or_else(|_| "sqlite:klave.db?mode=rwc".to_string()),
             port: std::env::var("KLAVE_PORT")
                 .ok()
-                .and_then(|p| p.parse().ok())
+                .and_then(|val| val.parse().ok())
                 .unwrap_or(3000),
             operator_api_key: std::env::var("KLAVE_OPERATOR_API_KEY")
                 .expect("KLAVE_OPERATOR_API_KEY must be set"),
@@ -36,12 +36,12 @@ impl Config {
             .expect("KLAVE_ENCRYPTION_KEY must be 64 hex chars"),
             jupiter_api_key: std::env::var("JUPITER_API_KEY")
                 .ok()
-                .filter(|k| !k.is_empty()),
+                .filter(|key| !key.is_empty()),
             allowed_origins: std::env::var("KLAVE_ALLOWED_ORIGINS")
                 .unwrap_or_else(|_| "*".to_string())
                 .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
+                .map(|val| val.trim().to_string())
+                .filter(|val| !val.is_empty())
                 .collect(),
         }
     }

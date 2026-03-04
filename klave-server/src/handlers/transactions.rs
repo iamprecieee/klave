@@ -62,7 +62,7 @@ pub async fn execute_transaction(
     }
 
     let agent = match state.agent_repo.find_by_id(&agent_id).await {
-        Ok(Some(a)) => a,
+        Ok(Some(agent)) => agent,
         Ok(None) => {
             return ApiResponse::<()>::error(StatusCode::NOT_FOUND, "agent not found".to_string())
                 .into_response();
@@ -74,7 +74,7 @@ pub async fn execute_transaction(
     };
 
     let policy = match state.agent_repo.find_policy(&agent_id).await {
-        Ok(Some(p)) => p,
+        Ok(Some(policy)) => policy,
         Ok(None) => {
             return ApiResponse::<()>::error(StatusCode::NOT_FOUND, "policy not found".to_string())
                 .into_response();
@@ -130,7 +130,8 @@ pub async fn execute_transaction(
 
     let payload_amount = payload.amount.unwrap_or(0);
 
-    let to_anchor = |p: Pubkey| anchor_lang::prelude::Pubkey::new_from_array(p.to_bytes());
+    let get_anchor_pubkey =
+        |key: Pubkey| anchor_lang::prelude::Pubkey::new_from_array(key.to_bytes());
 
     match instruction_type {
         InstructionType::SolTransfer | InstructionType::AgentWithdrawal => {
@@ -152,8 +153,8 @@ pub async fn execute_transaction(
 
         InstructionType::CloseVault => {
             let accounts = CloseVault {
-                vault: to_anchor(vault_pda),
-                agent: to_anchor(agent_pubkey),
+                vault: get_anchor_pubkey(vault_pda),
+                agent: get_anchor_pubkey(agent_pubkey),
                 system_program: anchor_lang::solana_program::system_program::ID,
             };
 
@@ -162,10 +163,10 @@ pub async fn execute_transaction(
                 accounts: accounts
                     .to_account_metas(Some(false))
                     .into_iter()
-                    .map(|a| AccountMeta {
-                        pubkey: Pubkey::new_from_array(a.pubkey.to_bytes()),
-                        is_signer: a.is_signer,
-                        is_writable: a.is_writable,
+                    .map(|account| AccountMeta {
+                        pubkey: Pubkey::new_from_array(account.pubkey.to_bytes()),
+                        is_signer: account.is_signer,
+                        is_writable: account.is_writable,
                     })
                     .collect(),
                 data: CloseInst {}.data(),
@@ -175,20 +176,20 @@ pub async fn execute_transaction(
 
         InstructionType::InitializeVault => {
             let accounts = InitializeVault {
-                vault: to_anchor(vault_pda),
-                agent: to_anchor(agent_pubkey),
-                payer: to_anchor(agent_pubkey),
-                system_program: to_anchor(SYSTEM_PROGRAM_ID),
+                vault: get_anchor_pubkey(vault_pda),
+                agent: get_anchor_pubkey(agent_pubkey),
+                payer: get_anchor_pubkey(agent_pubkey),
+                system_program: get_anchor_pubkey(SYSTEM_PROGRAM_ID),
             };
             instructions.push(Instruction {
                 program_id: Pubkey::new_from_array(klave_anchor::ID.to_bytes()),
                 accounts: accounts
                     .to_account_metas(Some(false))
                     .into_iter()
-                    .map(|a| AccountMeta {
-                        pubkey: Pubkey::new_from_array(a.pubkey.to_bytes()),
-                        is_signer: a.is_signer,
-                        is_writable: a.is_writable,
+                    .map(|account| AccountMeta {
+                        pubkey: Pubkey::new_from_array(account.pubkey.to_bytes()),
+                        is_signer: account.is_signer,
+                        is_writable: account.is_writable,
                     })
                     .collect(),
                 data: InitInst {}.data(),
@@ -199,19 +200,19 @@ pub async fn execute_transaction(
 
         InstructionType::DepositToVault => {
             let accounts = VaultOperation {
-                vault: to_anchor(vault_pda),
-                agent: to_anchor(agent_pubkey),
-                system_program: to_anchor(SYSTEM_PROGRAM_ID),
+                vault: get_anchor_pubkey(vault_pda),
+                agent: get_anchor_pubkey(agent_pubkey),
+                system_program: get_anchor_pubkey(SYSTEM_PROGRAM_ID),
             };
             instructions.push(Instruction {
                 program_id: Pubkey::new_from_array(klave_anchor::ID.to_bytes()),
                 accounts: accounts
                     .to_account_metas(Some(false))
                     .into_iter()
-                    .map(|a| AccountMeta {
-                        pubkey: Pubkey::new_from_array(a.pubkey.to_bytes()),
-                        is_signer: a.is_signer,
-                        is_writable: a.is_writable,
+                    .map(|account| AccountMeta {
+                        pubkey: Pubkey::new_from_array(account.pubkey.to_bytes()),
+                        is_signer: account.is_signer,
+                        is_writable: account.is_writable,
                     })
                     .collect(),
                 data: DepInst {
@@ -225,19 +226,19 @@ pub async fn execute_transaction(
 
         InstructionType::WithdrawFromVault => {
             let accounts = VaultOperation {
-                vault: to_anchor(vault_pda),
-                agent: to_anchor(agent_pubkey),
-                system_program: to_anchor(SYSTEM_PROGRAM_ID),
+                vault: get_anchor_pubkey(vault_pda),
+                agent: get_anchor_pubkey(agent_pubkey),
+                system_program: get_anchor_pubkey(SYSTEM_PROGRAM_ID),
             };
             instructions.push(Instruction {
                 program_id: Pubkey::new_from_array(klave_anchor::ID.to_bytes()),
                 accounts: accounts
                     .to_account_metas(Some(false))
                     .into_iter()
-                    .map(|a| AccountMeta {
-                        pubkey: Pubkey::new_from_array(a.pubkey.to_bytes()),
-                        is_signer: a.is_signer,
-                        is_writable: a.is_writable,
+                    .map(|account| AccountMeta {
+                        pubkey: Pubkey::new_from_array(account.pubkey.to_bytes()),
+                        is_signer: account.is_signer,
+                        is_writable: account.is_writable,
                     })
                     .collect(),
                 data: WdInst {
@@ -252,7 +253,7 @@ pub async fn execute_transaction(
     }
 
     let past_spend_usd = match state.audit_store.sum_daily_spend(&agent.id).await {
-        Ok(s) => s,
+        Ok(sum) => sum,
         Err(e) => {
             tracing::error!(error = %e, "failed to fetch daily spend");
             return ApiResponse::<()>::error(
@@ -266,7 +267,7 @@ pub async fn execute_transaction(
     let daily_spend_usd = past_spend_usd + tx_usd_value;
 
     if let Err(violations) = PolicyEngine::evaluate(&policy, &policy_req, daily_spend_usd) {
-        let violation_strings: Vec<String> = violations.iter().map(|v| v.to_string()).collect();
+        let violation_strings: Vec<String> = violations.iter().map(|val| val.to_string()).collect();
         let entry = NewAuditEntry {
             agent_id: agent.id.clone(),
             instruction_type: policy_req.instruction_type.to_string(),
@@ -284,7 +285,7 @@ pub async fn execute_transaction(
     }
 
     let signer = match state.agent_signer.load(&agent_id).await {
-        Ok(s) => s,
+        Ok(signer) => signer,
         Err(e) => {
             return ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
                 .into_response();
@@ -292,7 +293,7 @@ pub async fn execute_transaction(
     };
 
     let recent_blockhash = match state.kora_gateway.get_latest_blockhash().await {
-        Ok(h) => h,
+        Ok(hash) => hash,
         Err(e) => {
             return ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
                 .into_response();
@@ -323,7 +324,7 @@ pub async fn execute_transaction(
     };
 
     let signature = match Signature::try_from(keychain_signature.as_ref()) {
-        Ok(s) => s,
+        Ok(sig) => sig,
         Err(e) => {
             return ApiResponse::<()>::error(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -337,9 +338,9 @@ pub async fn execute_transaction(
     // The fee payer (Kora) is always at index 0. If the agent is also a required signer,
     // they will be at index 1 (or 0 if they are paying their own fee).
     let mut signers_found = false;
-    for (i, pk) in message.account_keys.iter().enumerate() {
-        if pk == &agent_pubkey && message.is_signer(i) {
-            legacy_tx.signatures[i] = signature;
+    for (idx, pk) in message.account_keys.iter().enumerate() {
+        if pk == &agent_pubkey && message.is_signer(idx) {
+            legacy_tx.signatures[idx] = signature;
             signers_found = true;
         }
     }

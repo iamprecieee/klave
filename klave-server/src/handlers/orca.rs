@@ -7,8 +7,9 @@ use axum::{
     http::StatusCode,
 };
 use klave_core::{
+    agent::model::SwapQuote,
+    audit::store::NewAuditEntry,
     policy::engine::{InstructionType, PolicyEngine},
-    {agent::model::SwapQuote, audit::store::NewAuditEntry},
 };
 use orca_whirlpools::SwapType;
 use serde::{Deserialize, Serialize};
@@ -58,24 +59,24 @@ pub async fn execute_swap(
     };
 
     let agent = match state.agent_repo.find_by_id(&agent_id).await {
-        Ok(Some(a)) => a,
+        Ok(Some(agent)) => agent,
         Ok(None) => return ApiResponse::error(StatusCode::NOT_FOUND, "agent not found"),
         Err(e) => return ApiResponse::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
 
     let policy = match state.agent_repo.find_policy(&agent_id).await {
-        Ok(Some(p)) => p,
+        Ok(Some(policy)) => policy,
         Ok(None) => return ApiResponse::error(StatusCode::NOT_FOUND, "agent policy not found"),
         Err(e) => return ApiResponse::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
 
     let slippage_bps = payload.slippage_bps.unwrap_or(policy.slippage_bps as u16);
     let whirlpool = match Pubkey::from_str(&payload.whirlpool) {
-        Ok(p) => p,
+        Ok(pool) => pool,
         Err(_) => return ApiResponse::error(StatusCode::BAD_REQUEST, "invalid whirlpool address"),
     };
     let input_mint = match Pubkey::from_str(&payload.input_mint) {
-        Ok(p) => p,
+        Ok(mint) => mint,
         Err(_) => return ApiResponse::error(StatusCode::BAD_REQUEST, "invalid input mint address"),
     };
 
@@ -89,7 +90,7 @@ pub async fn execute_swap(
         &payload.input_mint,
         slippage_bps as i32,
     ) {
-        let violation_strings: Vec<String> = violations.iter().map(|v| v.to_string()).collect();
+        let violation_strings: Vec<String> = violations.iter().map(|val| val.to_string()).collect();
         let entry = NewAuditEntry {
             agent_id: agent.id.clone(),
             instruction_type: InstructionType::TokenSwap.to_string(),
@@ -107,8 +108,16 @@ pub async fn execute_swap(
 
     // Swap volume check
     let swap_usd_value = state.price_feed.lamports_to_usd(payload.amount).await;
+    if swap_usd_value == 0.0 {
+        tracing::error!("swap price feed check returned '0.0'");
+        return ApiResponse::error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to assess swap price feed",
+        );
+    }
+
     let daily_swap_volume = match state.audit_store.sum_swap_volume(&agent_id).await {
-        Ok(v) => v,
+        Ok(val) => val,
         Err(e) => {
             tracing::error!(error = %e, "failed to fetch swap volume");
             return ApiResponse::error(
@@ -120,7 +129,7 @@ pub async fn execute_swap(
     if let Err(violations) =
         PolicyEngine::check_swap_volume(&policy, swap_usd_value, daily_swap_volume)
     {
-        let violation_strings: Vec<String> = violations.iter().map(|v| v.to_string()).collect();
+        let violation_strings: Vec<String> = violations.iter().map(|val| val.to_string()).collect();
         let entry = NewAuditEntry {
             agent_id: agent.id.clone(),
             instruction_type: InstructionType::TokenSwap.to_string(),
@@ -167,12 +176,12 @@ pub async fn execute_swap(
     };
 
     let signer_arc = match state.agent_signer.load(&agent_id).await {
-        Ok(s) => s,
+        Ok(signer) => signer,
         Err(e) => return ApiResponse::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
 
     let blockhash = match state.kora_gateway.get_latest_blockhash().await {
-        Ok(h) => h,
+        Ok(hash) => hash,
         Err(e) => return ApiResponse::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
 
@@ -187,7 +196,7 @@ pub async fn execute_swap(
 
     let message_bytes = tx.message.serialize();
     let keychain_sig = match signer_arc.sign_message(&message_bytes).await {
-        Ok(s) => s,
+        Ok(sig) => sig,
         Err(e) => {
             return ApiResponse::error(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -197,9 +206,9 @@ pub async fn execute_swap(
     };
     let agent_sig = Signature::from(<[u8; 64]>::from(keychain_sig));
 
-    for (i, pk) in tx.message.account_keys.iter().enumerate() {
-        if pk == &agent_pubkey && tx.message.is_signer(i) {
-            tx.signatures[i] = agent_sig;
+    for (idx, pk) in tx.message.account_keys.iter().enumerate() {
+        if pk == &agent_pubkey && tx.message.is_signer(idx) {
+            tx.signatures[idx] = agent_sig;
         }
     }
 
@@ -208,7 +217,7 @@ pub async fn execute_swap(
             .message
             .account_keys
             .iter()
-            .position(|k| k == &kp.pubkey())
+            .position(|key| key == &kp.pubkey())
         {
             tx.signatures[idx] = kp.sign_message(&message_bytes);
         }
@@ -301,16 +310,16 @@ pub async fn get_swap_quote(
     }
 
     let whirlpool = match Pubkey::from_str(&payload.whirlpool) {
-        Ok(p) => p,
+        Ok(pool) => pool,
         Err(_) => return ApiResponse::error(StatusCode::BAD_REQUEST, "invalid whirlpool address"),
     };
     let input_mint = match Pubkey::from_str(&payload.input_mint) {
-        Ok(p) => p,
+        Ok(mint) => mint,
         Err(_) => return ApiResponse::error(StatusCode::BAD_REQUEST, "invalid input mint address"),
     };
 
     let agent = match state.agent_repo.find_by_id(&id).await {
-        Ok(Some(a)) => a,
+        Ok(Some(agent)) => agent,
         Ok(None) => return ApiResponse::error(StatusCode::NOT_FOUND, "agent not found"),
         Err(e) => return ApiResponse::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
