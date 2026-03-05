@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-TREASURY_PROGRAM_ID = "H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex"
+TREASURY_PROGRAM_ID = "4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz"
 SYSTEM_PROGRAM_ID = "11111111111111111111111111111111"
 
 

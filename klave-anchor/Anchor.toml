@@ -5,11 +5,8 @@ package_manager = "yarn"
 resolution = true
 skip-lint = false
 
-[programs.localnet]
-klave_anchor = "H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex"
-
 [programs.devnet]
-klave_anchor = "H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex"
+klave_anchor = "4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz"
 
 [registry]
 url = "https://api.apr.dev"

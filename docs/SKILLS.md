@@ -421,7 +421,7 @@ Every agent has a policy that governs what it can do. The policy is set at creat
 | Program        | ID                                             | Needed for                      |
 | -------------- | ---------------------------------------------- | ------------------------------- |
 | System Program | `11111111111111111111111111111111`             | SOL transfers, vault operations |
-| Klave Treasury | `H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex` | Vault init, deposit, withdraw   |
+| Klave Treasury | `4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz` | Vault init, deposit, withdraw   |
 | Orca Whirlpool | `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc`  | Token swaps                     |
 
 ---

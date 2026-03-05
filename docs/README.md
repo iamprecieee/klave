@@ -78,7 +78,7 @@ klave start --with-kora --dashboard
 ```
 
 > [!IMPORTANT]
-> The Treasury Program ID `H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex` is hardcoded in several critical locations for security whitelisting. If you re-deploy to a different ID, you **must** update it in:
+> The Treasury Program ID `4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz` is hardcoded in several critical locations for security whitelisting. If you re-deploy to a different ID, you **must** update it in:
 >- **On-chain**: `klave-anchor/programs/klave-anchor/src/lib.rs` and `klave-anchor/Anchor.toml`
 >- **Server**: `klave-core/src/agent/model.rs` (the `TREASURY_PROGRAM_ID` constant)
 >- **SDK/Demo**: `sdk/klave/models.py`
@@ -295,7 +295,7 @@ All configuration lives in `.env`. Run `klave init` to auto-generate secrets.
 | Problem                             | Solution                                                                                                                                                                                                                                 |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `solana airdrop` fails              | Use [faucet.solana.com](https://faucet.solana.com/) instead — CLI airdrops are heavily rate-limited                                                                                                                                      |
-| `ProgramNotAllowed` on transactions | Add the required program IDs to the agent's `allowed_programs` policy. System Program: `11111111111111111111111111111111`, Treasury: `H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex`, Orca: `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc` |
+| `ProgramNotAllowed` on transactions | Add the required program IDs to the agent's `allowed_programs` policy. System Program: `11111111111111111111111111111111`, Treasury: `4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz`, Orca: `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc` |
 | `No .env found`                     | Run `klave init` first                                                                                                                                                                                                                   |
 | Vault operations fail               | Run `klave deploy` to deploy the treasury program to devnet before using vault features                                                                                                                                                  |
 | Kora offline                        | Ensure `klave start --with-kora` was used. Check `kora.log` for errors. The Kora fee-payer needs SOL for gas.                                                                                                                            |

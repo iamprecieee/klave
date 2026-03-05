@@ -108,41 +108,46 @@ pub async fn execute_swap(
 
     // Swap volume check
     let swap_usd_value = state.price_feed.lamports_to_usd(payload.amount).await;
-    if swap_usd_value == 0.0 {
-        tracing::error!("swap price feed check returned '0.0'");
-        return ApiResponse::error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to assess swap price feed",
-        );
-    }
 
-    let daily_swap_volume = match state.audit_store.sum_swap_volume(&agent_id).await {
-        Ok(val) => val,
-        Err(e) => {
-            tracing::error!(error = %e, "failed to fetch swap volume");
+    if policy.daily_swap_volume_usd > 0.0 {
+        if swap_usd_value == 0.0 {
+            tracing::warn!("price feed unavailable, blocking swap to enforce volume policy");
             return ApiResponse::error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to assess swap volume limit",
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Swap volume policy cannot be enforced: price feed unavailable",
             );
         }
-    };
-    if let Err(violations) =
-        PolicyEngine::check_swap_volume(&policy, swap_usd_value, daily_swap_volume)
-    {
-        let violation_strings: Vec<String> = violations.iter().map(|val| val.to_string()).collect();
-        let entry = NewAuditEntry {
-            agent_id: agent.id.clone(),
-            instruction_type: InstructionType::TokenSwap.to_string(),
-            status: "rejected".to_string(),
-            tx_signature: None,
-            policy_violations: Some(violation_strings.clone()),
-            metadata: None,
+
+        let daily_swap_volume = match state.audit_store.sum_swap_volume(&agent_id).await {
+            Ok(val) => val,
+            Err(e) => {
+                tracing::error!(error = %e, "failed to fetch swap volume");
+                return ApiResponse::error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to assess swap volume limit",
+                );
+            }
         };
-        let _ = state.audit_store.append(&entry).await;
-        return ApiResponse::error(
-            StatusCode::FORBIDDEN,
-            format!("Policy Violations: {:?}", violation_strings),
-        );
+
+        if let Err(violations) =
+            PolicyEngine::check_swap_volume(&policy, swap_usd_value, daily_swap_volume)
+        {
+            let violation_strings: Vec<String> =
+                violations.iter().map(|val| val.to_string()).collect();
+            let entry = NewAuditEntry {
+                agent_id: agent.id.clone(),
+                instruction_type: InstructionType::TokenSwap.to_string(),
+                status: "rejected".to_string(),
+                tx_signature: None,
+                policy_violations: Some(violation_strings.clone()),
+                metadata: None,
+            };
+            let _ = state.audit_store.append(&entry).await;
+            return ApiResponse::error(
+                StatusCode::FORBIDDEN,
+                format!("Policy Violations: {:?}", violation_strings),
+            );
+        }
     }
 
     let agent_pubkey = match Pubkey::from_str(&agent.pubkey) {

@@ -36,7 +36,7 @@ impl<T: Serialize> ApiResponse<T> {
             tracing::error!(internal_error = %msg, "Internal server error occurred");
             Self {
                 success: false,
-                message: "Internal Server Error".to_string(),
+                message: msg,
                 data: None,
                 status_code: status.as_u16(),
             }

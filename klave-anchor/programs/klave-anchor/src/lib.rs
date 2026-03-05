@@ -1,121 +1,30 @@
-use anchor_lang::{
-    prelude::*,
-    system_program::{transfer, Transfer},
-};
+pub mod error;
+pub mod instructions;
+pub mod state;
 
-declare_id!("H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex");
+use anchor_lang::prelude::*;
 
-#[account]
-pub struct AgentVault {
-    pub agent: Pubkey,
-    pub bump: u8,
-}
+pub use instructions::*;
 
-#[derive(Accounts)]
-pub struct InitializeVault<'info> {
-    #[account(
-        init,
-        payer = payer,
-        space = 8 + 32 + 1, // discriminator + pubkey + bump
-        seeds = [b"vault", agent.key().as_ref()],
-        bump
-    )]
-    pub vault: Account<'info, AgentVault>,
-
-    /// CHECK: The agent pubkey. Used as a seed for the PDA.
-    pub agent: UncheckedAccount<'info>,
-
-    #[account(mut)]
-    pub payer: Signer<'info>,
-
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct VaultOperation<'info> {
-    #[account(
-        mut,
-        seeds = [b"vault", agent.key().as_ref()],
-        bump = vault.bump
-    )]
-    pub vault: Account<'info, AgentVault>,
-
-    #[account(mut)]
-    pub agent: Signer<'info>,
-
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct CloseVault<'info> {
-    #[account(
-        mut,
-        close = agent,
-        seeds = [b"vault", agent.key().as_ref()],
-        bump = vault.bump,
-        has_one = agent
-    )]
-    pub vault: Account<'info, AgentVault>,
-
-    #[account(mut)]
-    pub agent: Signer<'info>,
-
-    pub system_program: Program<'info, System>,
-}
+declare_id!("4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz");
 
 #[program]
 pub mod klave_anchor {
     use super::*;
 
     pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
-        let vault = &mut ctx.accounts.vault;
-        vault.agent = ctx.accounts.agent.key();
-        vault.bump = ctx.bumps.vault;
-        Ok(())
+        instructions::vault_init_handler(ctx)
     }
 
     pub fn deposit(ctx: Context<VaultOperation>, amount: u64) -> Result<()> {
-        let cpi_context = CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
-            Transfer {
-                from: ctx.accounts.agent.to_account_info(),
-                to: ctx.accounts.vault.to_account_info(),
-            },
-        );
-        transfer(cpi_context, amount)
+        instructions::vault_deposit_handler(ctx, amount)
     }
 
     pub fn withdraw(ctx: Context<VaultOperation>, amount: u64) -> Result<()> {
-        let vault_info = ctx.accounts.vault.to_account_info();
-        let agent_info = ctx.accounts.agent.to_account_info();
-
-        let rent = Rent::get()?;
-        let min_rent = rent.minimum_balance(vault_info.data_len());
-
-        if vault_info.lamports() < amount {
-            return err!(VaultError::InsufficientFunds);
-        }
-
-        if vault_info.lamports() - amount < min_rent {
-            return err!(VaultError::BelowRentExemptionThreshold);
-        }
-
-        **vault_info.try_borrow_mut_lamports()? -= amount;
-        **agent_info.try_borrow_mut_lamports()? += amount;
-
-        Ok(())
+        instructions::vault_withdraw_handler(ctx, amount)
     }
 
-    pub fn close_vault(_ctx: Context<CloseVault>) -> Result<()> {
-        // Rent is automatically recovered to the agent via the `close = agent` attribute
-        Ok(())
+    pub fn close_vault(ctx: Context<CloseVault>) -> Result<()> {
+        instructions::vault_closure_handler(ctx)
     }
-}
-
-#[error_code]
-pub enum VaultError {
-    #[msg("Insufficient funds in vault")]
-    InsufficientFunds,
-    #[msg("Withdrawal would leave vault below rent-exemption threshold")]
-    BelowRentExemptionThreshold,
 }

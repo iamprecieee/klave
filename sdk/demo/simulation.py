@@ -1,5 +1,11 @@
 from .utils import flow_step, flow_line, flow_thought, flow_done, SOL_MINT, USDC_MINT
-from klave import AgentPolicyInput, KlaveClient, AgentBalance, TREASURY_PROGRAM_ID, SYSTEM_PROGRAM_ID
+from klave import (
+    AgentPolicyInput,
+    KlaveClient,
+    AgentBalance,
+    TREASURY_PROGRAM_ID,
+    SYSTEM_PROGRAM_ID,
+)
 
 
 async def run_simulation(client: KlaveClient, agent_id: str) -> None:

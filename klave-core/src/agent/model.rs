@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub const SYSTEM_PROGRAM_ID: &str = "11111111111111111111111111111111";
 pub const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-pub const TREASURY_PROGRAM_ID: &str = "H2RojwyiyJ9CqTPoP1SynmutevCfq7YGskwcoPj1C7Ex";
+pub const TREASURY_PROGRAM_ID: &str = "4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz";
 pub const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
