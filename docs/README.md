@@ -79,11 +79,12 @@ klave start --with-kora --dashboard
 
 > [!IMPORTANT]
 > The Treasury Program ID `4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz` is hardcoded in several critical locations for security whitelisting. If you re-deploy to a different ID, you **must** update it in:
->- **On-chain**: `klave-anchor/programs/klave-anchor/src/lib.rs` and `klave-anchor/Anchor.toml`
->- **Server**: `klave-core/src/agent/model.rs` (the `TREASURY_PROGRAM_ID` constant)
->- **SDK/Demo**: `sdk/klave/models.py`
->- **Relayer**: `kora.example.toml` (if using Kora)
->- **Docs**: `SKILLS.md`, `REGISTER.md`, and `HEARTBEAT.md` (to keep agent context accurate)
+>
+> - **On-chain**: `klave-anchor/programs/klave-anchor/src/lib.rs` and `klave-anchor/Anchor.toml`
+> - **Server**: `klave-core/src/agent/model.rs` (the `TREASURY_PROGRAM_ID` constant)
+> - **SDK/Demo**: `sdk/klave/models.py`
+> - **Relayer**: `kora.example.toml` (if using Kora)
+> - **Docs**: `SKILLS.md`, `REGISTER.md`, and `HEARTBEAT.md` (to keep agent context accurate)
 
 The services should be running on:
 
@@ -236,16 +237,16 @@ All `/api/v1` endpoints require the `X-API-Key` header. Full reference with requ
 
 ### Agent lifecycle
 
-| Method   | Endpoint                      | Description              | Key Type |
-| -------- | ----------------------------- | ------------------------ | -------- |
-| `POST`   | `/api/v1/agents`              | Create agent with policy | Public   |
-| `GET`    | `/api/v1/agents`              | List all agents          | Operator |
-| `DELETE` | `/api/v1/agents/{id}`         | Deactivate agent         | Operator |
-| `GET`    | `/api/v1/agents/{id}/balance` | SOL + vault balance      | Agent    |
-| `GET`    | `/api/v1/agents/{id}/tokens`  | SPL token balances       | Agent    |
-| `GET`    | `/api/v1/agents/{id}/history` | Transaction audit log    | Agent    |
-| `POST`   | `/api/v1/agents/{id}/notify`  | Trigger dashboard refresh| Agent    |
-| `PUT`    | `/api/v1/agents/{id}/policy`  | Update agent policy      | Operator |
+| Method   | Endpoint                      | Description                       | Key Type |
+| -------- | ----------------------------- | --------------------------------- | -------- |
+| `POST`   | `/api/v1/agents`              | Create agent with policy          | Public   |
+| `GET`    | `/api/v1/agents`              | List agents (`?limit=N&offset=M`) | Operator |
+| `DELETE` | `/api/v1/agents/{id}`         | Deactivate agent                  | Operator |
+| `GET`    | `/api/v1/agents/{id}/balance` | SOL + vault balance               | Agent    |
+| `GET`    | `/api/v1/agents/{id}/tokens`  | SPL token balances                | Agent    |
+| `GET`    | `/api/v1/agents/{id}/history` | Audit log (`?limit=N&offset=M`)   | Agent    |
+| `POST`   | `/api/v1/agents/{id}/notify`  | Trigger dashboard refresh         | Agent    |
+| `PUT`    | `/api/v1/agents/{id}/policy`  | Update agent policy               | Operator |
 
 ### Transactions
 

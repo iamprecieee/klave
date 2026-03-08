@@ -32,3 +32,5 @@ pub enum KlaveError {
     #[error("RPC error: {0}")]
     RpcError(String),
 }
+
+pub type Result<T> = std::result::Result<T, KlaveError>;

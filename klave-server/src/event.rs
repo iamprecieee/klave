@@ -25,3 +25,16 @@ pub enum ServerEvent {
         text: String,
     },
 }
+
+impl ServerEvent {
+    /// Used for per-agent SSE filtering.
+    pub fn agent_id(&self) -> Option<&str> {
+        match self {
+            ServerEvent::AgentCreated { id, .. } => Some(id),
+            ServerEvent::AgentUpdated { id } => Some(id),
+            ServerEvent::TransactionExecuted { agent_id, .. } => Some(agent_id),
+            ServerEvent::BalanceUpdated { agent_id, .. } => Some(agent_id),
+            ServerEvent::Message { .. } => None,
+        }
+    }
+}

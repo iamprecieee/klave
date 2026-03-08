@@ -19,13 +19,20 @@ pub fn build_router(state: AppState) -> Router {
         .finish()
         .unwrap();
 
-    let public_routes = Router::new().route("/agents", post(agents::create_agent));
+    let creation_governor_conf = GovernorConfigBuilder::default()
+        .per_second(60)
+        .burst_size(5)
+        .finish()
+        .unwrap();
+
+    let public_routes = Router::new()
+        .route("/agents", post(agents::create_agent))
+        .layer(GovernorLayer::new(Arc::new(creation_governor_conf)));
 
     let operator_only_routes = Router::new()
         .route("/agents", get(agents::list_agents))
         .route("/agents/{id}", delete(agents::deactivate_agent))
         .route("/agents/{id}/policy", put(agents::update_policy))
-        .route("/events", get(events::sse_handler))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             operator_key_auth,
@@ -36,6 +43,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/agents/{id}/balance", get(agents::get_agent_balance))
         .route("/agents/{id}/tokens", get(agents::get_agent_token_balances))
         .route("/agents/{id}/notify", post(agents::notify_balance_updated))
+        .route("/events", get(events::sse_handler))
         .layer(middleware::from_fn_with_state(state.clone(), api_key_auth));
 
     let agent_only_routes = Router::new()

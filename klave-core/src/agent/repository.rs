@@ -9,7 +9,7 @@ use sqlx::SqlitePool;
 use crate::{
     agent::model::{Agent, AgentPolicy, AgentPolicyInput, CreateAgentRequest, default_programs},
     crypto,
-    error::KlaveError,
+    error::{KlaveError, Result},
 };
 
 pub struct AgentRepository {
@@ -35,7 +35,7 @@ impl AgentRepository {
         format!("{:x}", hasher.finalize())
     }
 
-    pub async fn create(&self, req: &CreateAgentRequest) -> Result<Agent, KlaveError> {
+    pub async fn create(&self, req: &CreateAgentRequest) -> Result<Agent> {
         let agent_id = Uuid::new_v4().to_string();
         let policy_id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp();
@@ -114,7 +114,7 @@ impl AgentRepository {
         })
     }
 
-    pub async fn find_by_id(&self, id: &str) -> Result<Option<Agent>, KlaveError> {
+    pub async fn find_by_id(&self, id: &str) -> Result<Option<Agent>> {
         let row = sqlx::query_as::<_, AgentRow>(
             "SELECT id, pubkey, label, is_active, created_at, policy_id \
              FROM agents WHERE id = ?",
@@ -126,17 +126,19 @@ impl AgentRepository {
         Ok(row.map(AgentRow::into_agent))
     }
 
-    pub async fn list_all(&self) -> Result<Vec<Agent>, KlaveError> {
+    pub async fn list_all(&self, limit: i64, offset: i64) -> Result<Vec<Agent>> {
         let rows = sqlx::query_as::<_, AgentRow>(
-            "SELECT id, pubkey, label, is_active, created_at, policy_id FROM agents",
+            "SELECT id, pubkey, label, is_active, created_at, policy_id FROM agents ORDER BY created_at DESC LIMIT ? OFFSET ?",
         )
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await?;
 
         Ok(rows.into_iter().map(AgentRow::into_agent).collect())
     }
 
-    pub async fn deactivate(&self, id: &str) -> Result<(), KlaveError> {
+    pub async fn deactivate(&self, id: &str) -> Result<()> {
         let result = sqlx::query("UPDATE agents SET is_active = 0 WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
@@ -149,7 +151,7 @@ impl AgentRepository {
         Ok(())
     }
 
-    pub async fn find_policy(&self, agent_id: &str) -> Result<Option<AgentPolicy>, KlaveError> {
+    pub async fn find_policy(&self, agent_id: &str) -> Result<Option<AgentPolicy>> {
         let row = sqlx::query_as::<_, AgentPolicyRow>(
             "SELECT id, agent_id, allowed_programs, max_lamports_per_tx, token_allowlist, \
              daily_spend_limit_usd, daily_swap_volume_usd, slippage_bps, \
@@ -170,7 +172,7 @@ impl AgentRepository {
         &self,
         agent_id: &str,
         input: &AgentPolicyInput,
-    ) -> Result<AgentPolicy, KlaveError> {
+    ) -> Result<AgentPolicy> {
         let now = Utc::now().timestamp();
         let allowed_programs_json = serde_json::to_string(&input.allowed_programs)?;
         let token_allowlist_json = serde_json::to_string(&input.token_allowlist)?;
@@ -204,7 +206,7 @@ impl AgentRepository {
             .ok_or_else(|| KlaveError::PolicyNotFound(agent_id.to_string()))
     }
 
-    pub async fn get_keypair(&self, id: &str) -> Result<Vec<u8>, KlaveError> {
+    pub async fn get_keypair(&self, id: &str) -> Result<Vec<u8>> {
         let row: Option<(Vec<u8>,)> =
             sqlx::query_as("SELECT encrypted_keypair FROM agents WHERE id = ?")
                 .bind(id)
@@ -217,11 +219,7 @@ impl AgentRepository {
         }
     }
 
-    pub async fn verify_agent_key(
-        &self,
-        agent_id: &str,
-        api_key: &str,
-    ) -> Result<bool, KlaveError> {
+    pub async fn verify_agent_key(&self, agent_id: &str, api_key: &str) -> Result<bool> {
         let hash = Self::hash_api_key(api_key);
         let row: Option<(String,)> =
             sqlx::query_as("SELECT id FROM agents WHERE id = ? AND api_key_hash = ?")
@@ -233,7 +231,7 @@ impl AgentRepository {
         Ok(row.is_some())
     }
 
-    pub async fn find_by_key_hash(&self, api_key: &str) -> Result<Option<Agent>, KlaveError> {
+    pub async fn find_by_key_hash(&self, api_key: &str) -> Result<Option<Agent>> {
         let hash = Self::hash_api_key(api_key);
         let row = sqlx::query_as::<_, AgentRow>(
             "SELECT id, pubkey, label, is_active, created_at, policy_id FROM agents WHERE api_key_hash = ?",
@@ -285,7 +283,7 @@ struct AgentPolicyRow {
 }
 
 impl AgentPolicyRow {
-    fn into_policy(self) -> Result<AgentPolicy, KlaveError> {
+    fn into_policy(self) -> Result<AgentPolicy> {
         Ok(AgentPolicy {
             id: self.id,
             agent_id: self.agent_id,

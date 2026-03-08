@@ -131,7 +131,9 @@ async def entry():
                 except Exception:
                     pass
 
-            agent_context = f"Your ID is {existing_agent.id if existing_agent else 'UNKNOWN'}.\n"
+            agent_context = (
+                f"Your ID is {existing_agent.id if existing_agent else 'UNKNOWN'}.\n"
+            )
             if existing_agent:
                 agent_context += f"Your Public Key is {existing_agent.pubkey}.\n"
 
@@ -168,7 +170,7 @@ async def entry():
                     tools=tools,
                     verbose=False,
                     handle_parsing_errors=True,
-                    max_iterations=12, 
+                    max_iterations=12,
                 )
 
                 result = await executor.ainvoke(
@@ -193,12 +195,18 @@ async def entry():
             if api_key or operator_key:
                 try:
                     agents = await client.list_agents()
-                    agent = next((a for a in agents if a.label == "demo-agent-v1"), None)
+                    agent = next(
+                        (a for a in agents if a.label == "demo-agent-v1"), None
+                    )
                 except Exception:
                     pass
 
             policy = AgentPolicyInput(
-                allowed_programs=["11111111111111111111111111111111", "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx", "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"],
+                allowed_programs=[
+                    "11111111111111111111111111111111",
+                    "GCU8h2yUZKPKemrxGu4tZoiiiUdhWeSonaWCgYbZaRBx",
+                    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+                ],
                 token_allowlist=[SOL_MINT, USDC_MINT],
                 max_lamports_per_tx=1_000_000_000,
                 daily_spend_limit_usd=100.0,
@@ -209,7 +217,7 @@ async def entry():
             if not agent:
                 agent = await client.create_agent("demo-agent-v1", policy)
                 flow_line(f"Registered new agent: {_color(TEAL, '[NEW]')}")
-            
+
             balance = await client.get_balance(agent.id)
             if balance.sol_lamports < 50000000:
                 flow_line(f"Fund: {agent.pubkey}")

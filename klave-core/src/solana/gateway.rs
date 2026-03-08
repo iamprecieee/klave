@@ -13,7 +13,10 @@ use solana_sdk::{
 };
 use solana_transaction_client::versioned::VersionedTransaction as ClientVersionedTransaction;
 
-use crate::{agent::model::TokenBalance, error::KlaveError};
+use crate::{
+    agent::model::TokenBalance,
+    error::{KlaveError, Result},
+};
 
 pub struct KoraGateway {
     kora_rpc_url: String,
@@ -35,32 +38,35 @@ impl KoraGateway {
         }
     }
 
-    pub async fn get_latest_blockhash(&self) -> Result<Hash, KlaveError> {
+    pub async fn get_latest_blockhash(&self) -> Result<Hash> {
         self.rpc_client
             .get_latest_blockhash()
             .await
             .map_err(|e| KlaveError::Internal(e.to_string()))
     }
 
-    pub async fn get_balance(&self, pubkey: &Pubkey) -> u64 {
-        self.rpc_client.get_balance(pubkey).await.unwrap_or(0)
+    pub async fn get_balance(&self, pubkey: &Pubkey) -> Result<u64> {
+        self.rpc_client
+            .get_balance(pubkey)
+            .await
+            .map_err(|e| KlaveError::Internal(format!("RPC get_balance failed: {}", e)))
     }
 
     pub async fn get_balances(
         &self,
         agent_pubkey: &Pubkey,
         vault_pda: &Pubkey,
-    ) -> Result<(u64, u64), KlaveError> {
-        let (sol_lamports, vault_lamports) =
+    ) -> Result<(u64, u64)> {
+        let (sol_result, vault_result) =
             tokio::join!(self.get_balance(agent_pubkey), self.get_balance(vault_pda));
 
-        Ok((sol_lamports, vault_lamports))
+        Ok((sol_result?, vault_result?))
     }
 
     pub async fn get_token_balances(
         &self,
         owner: &Pubkey,
-    ) -> Result<Vec<crate::agent::model::TokenBalance>, KlaveError> {
+    ) -> Result<Vec<crate::agent::model::TokenBalance>> {
         let accounts = self
             .rpc_client
             .get_token_accounts_by_owner(
@@ -121,10 +127,7 @@ impl KoraGateway {
         Ok(balances)
     }
 
-    pub async fn send_transaction(
-        &self,
-        tx: &VersionedTransaction,
-    ) -> Result<(Signature, bool), KlaveError> {
+    pub async fn send_transaction(&self, tx: &VersionedTransaction) -> Result<(Signature, bool)> {
         let bincode_tx = bincode::serialize(tx).map_err(|e| KlaveError::Internal(e.to_string()))?;
         let b64_tx = general_purpose::STANDARD.encode(&bincode_tx);
 
@@ -163,6 +166,9 @@ impl KoraGateway {
                                 .send_transaction_with_config(
                                     &fully_signed_tx,
                                     RpcSendTransactionConfig {
+                                        // Kora co-signing adds a round-trip that can make the
+                                        // blockhash stale before preflight simulation runs.
+                                        // The direct RPC fallback path uses default preflight.
                                         skip_preflight: true,
                                         ..Default::default()
                                     },

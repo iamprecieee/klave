@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -12,10 +12,17 @@ use klave_core::{
     audit::store::NewAuditEntry,
     error::KlaveError,
 };
+use serde::Deserialize;
 use solana_sdk::pubkey::Pubkey;
 use tracing::{error, info};
 
 use crate::{event::ServerEvent, middleware::AuthContext, response::ApiResponse, state::AppState};
+
+#[derive(Debug, Deserialize)]
+pub struct PaginationQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
 
 pub async fn create_agent(
     State(state): State<AppState>,
@@ -67,9 +74,13 @@ pub async fn create_agent(
 pub async fn list_agents(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
+    Query(pagination): Query<PaginationQuery>,
 ) -> Response {
+    let limit = pagination.limit.unwrap_or(50).min(200);
+    let offset = pagination.offset.unwrap_or(0).max(0);
+
     if auth.is_operator {
-        match state.agent_repo.list_all().await {
+        match state.agent_repo.list_all(limit, offset).await {
             Ok(agents) => match serde_json::to_value(&agents) {
                 Ok(val) => ApiResponse::success(val, "agents retrieved").into_response(),
                 Err(e) => {
@@ -133,6 +144,7 @@ pub async fn get_agent_history(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
+    Query(pagination): Query<PaginationQuery>,
 ) -> Response {
     if !auth.is_operator && auth.agent_id.as_deref() != Some(&id) {
         return ApiResponse::<()>::error(StatusCode::FORBIDDEN, "Forbidden").into_response();
@@ -158,7 +170,14 @@ pub async fn get_agent_history(
         }
     };
 
-    match state.audit_store.list_by_agent(&agent.id).await {
+    let limit = pagination.limit.unwrap_or(100).min(500);
+    let offset = pagination.offset.unwrap_or(0).max(0);
+
+    match state
+        .audit_store
+        .list_by_agent(&agent.id, limit, offset)
+        .await
+    {
         Ok(entries) => match serde_json::to_value(&entries) {
             Ok(val) => ApiResponse::success(val, "transaction history retrieved").into_response(),
             Err(e) => ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
@@ -394,11 +413,17 @@ pub async fn notify_balance_updated(
     let (vault_pda, _) =
         Pubkey::find_program_address(&[b"vault", agent_pubkey.as_ref()], &program_id);
 
-    let (sol, vault) = state
+    let (sol, vault) = match state
         .kora_gateway
         .get_balances(&agent_pubkey, &vault_pda)
         .await
-        .unwrap_or((0, 0));
+    {
+        Ok(balances) => balances,
+        Err(e) => {
+            error!(error = %e, agent_id = %id, "failed to fetch balances for notify");
+            (0, 0)
+        }
+    };
     let tokens = state
         .kora_gateway
         .get_token_balances(&agent_pubkey)

@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use solana_keychain::Signer as KSigner;
 
-use crate::{agent::repository::AgentRepository, error::KlaveError};
+use crate::{
+    agent::repository::AgentRepository,
+    error::{KlaveError, Result},
+};
 
 #[derive(Clone)]
 pub struct AgentSigner {
@@ -14,7 +17,7 @@ impl AgentSigner {
         Self { repo }
     }
 
-    pub async fn load(&self, agent_id: &str) -> Result<KSigner, KlaveError> {
+    pub async fn load(&self, agent_id: &str) -> Result<KSigner> {
         let keypair_bytes = self.repo.get_keypair(agent_id).await?;
         let json_str = serde_json::to_string(&keypair_bytes).map_err(|e| {
             KlaveError::Internal(format!("Failed to serialize keypair bytes: {}", e))

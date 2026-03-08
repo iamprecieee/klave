@@ -4,11 +4,11 @@ use aes_gcm::{
 };
 use rand::random;
 
-use crate::error::KlaveError;
+use crate::error::{KlaveError, Result};
 
 const NONCE_LEN: usize = 12;
 
-pub fn encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, KlaveError> {
+pub fn encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>> {
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
 
     let nonce_bytes: [u8; NONCE_LEN] = random();
@@ -24,7 +24,7 @@ pub fn encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, KlaveError> 
     Ok(output)
 }
 
-pub fn decrypt(blob: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, KlaveError> {
+pub fn decrypt(blob: &[u8], key: &[u8; 32]) -> Result<Vec<u8>> {
     if blob.len() < NONCE_LEN {
         return Err(KlaveError::Internal("encrypted blob too short".to_string()));
     }
@@ -38,7 +38,7 @@ pub fn decrypt(blob: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, KlaveError> {
         .map_err(|e| KlaveError::Internal(format!("decryption failed: {e}")))
 }
 
-pub fn parse_hex_key(hex: &str) -> Result<[u8; 32], KlaveError> {
+pub fn parse_hex_key(hex: &str) -> Result<[u8; 32]> {
     let hex = hex.trim();
     if hex.len() != 64 {
         return Err(KlaveError::Internal(format!(

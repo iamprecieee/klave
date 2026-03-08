@@ -137,11 +137,11 @@ pub fn make_spinner(message: &str) -> indicatif::ProgressBar {
     let template = format!(
         "{}  {} {{msg}}",
         style("│").color256(AMBER),
-        style("⠋").color256(TEAL)
+        style("{spinner}").color256(TEAL)
     );
     pb.set_style(
         indicatif::ProgressStyle::default_spinner()
-            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ")
+            .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ")
             .template(&template)
             .expect("valid template"),
     );

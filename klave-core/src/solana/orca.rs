@@ -13,7 +13,10 @@ use solana_client::{
 };
 use solana_sdk::{instruction::Instruction, pubkey::Pubkey, signature::Keypair};
 
-use crate::{agent::model::SwapQuote, error::KlaveError};
+use crate::{
+    agent::model::SwapQuote,
+    error::{KlaveError, Result},
+};
 
 const WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 const DEVNET_WHIRLPOOLS_CONFIG: &str = "FcrweFY1G9HJAHG5inkGB6pKg1HZ6x9UC2WioAfWrGkR";
@@ -44,7 +47,7 @@ impl OrcaClient {
         swap_type: SwapType,
         slippage_bps: u16,
         funder: Pubkey,
-    ) -> Result<OrcaInstructionResult, KlaveError> {
+    ) -> Result<OrcaInstructionResult> {
         let result = swap_instructions(
             &self.rpc_client,
             whirlpool,
@@ -72,7 +75,7 @@ impl OrcaClient {
         swap_type: SwapType,
         slippage_bps: u16,
         funder: Option<Pubkey>,
-    ) -> Result<SwapQuote, KlaveError> {
+    ) -> Result<SwapQuote> {
         // Simulate the swap and gets the quote.
         let result = swap_instructions(
             &self.rpc_client,
@@ -115,7 +118,7 @@ impl OrcaClient {
         &self,
         token_filter: Option<String>,
         limit: Option<usize>,
-    ) -> Result<serde_json::Value, KlaveError> {
+    ) -> Result<serde_json::Value> {
         let limit = limit.unwrap_or(20);
         let whirlpool_program_id = Pubkey::from_str(WHIRLPOOL_PROGRAM_ID)
             .map_err(|e| KlaveError::Internal(format!("Invalid program ID: {}", e)))?;
@@ -173,13 +176,10 @@ impl OrcaClient {
 
             match Whirlpool::from_bytes(&data_bytes) {
                 Ok(whirlpool) => {
-                    // Skip pools with no liquidity (unusable for swaps)
                     if whirlpool.liquidity == 0 {
                         continue;
                     }
 
-                    // Convert sqrt_price to human-readable price
-                    // price = (sqrt_price / 2^64)^2
                     let sqrt_price_x64 = whirlpool.sqrt_price;
                     let price = if sqrt_price_x64 > 0 {
                         let sqrt_price_f64 = sqrt_price_x64 as f64 / (1u128 << 64) as f64;

@@ -262,6 +262,17 @@ def build_operator_tools(client: KlaveClient) -> list:
             return f"[ERROR] Failed to save state: {str(e)}"
 
     @tool
+    async def notify_dashboard(agent_id: str) -> str:
+        """Notify the dashboard to refresh balance data for a specific
+        agent. Use after vault operations or transfers so the UI
+        updates in real-time."""
+        try:
+            await client.notify_balance_updated(agent_id)
+            return "Dashboard notified successfully."
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
+
+    @tool
     async def wait_for_manual_funding(address: str) -> str:
         """Pause execution and prompt the user to fund the given Solana
         address. Use after creating a new agent or when funds are low.
@@ -290,5 +301,6 @@ def build_operator_tools(client: KlaveClient) -> list:
         get_health,
         list_tokens,
         save_heartbeat,
+        notify_dashboard,
         wait_for_manual_funding,
     ]

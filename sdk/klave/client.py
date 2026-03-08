@@ -155,6 +155,14 @@ class KlaveClient:
         data = await self._request("GET", f"/api/v1/agents/{agent_id}/tokens")
         return data
 
+    async def notify_balance_updated(self, agent_id: str) -> None:
+        """Notify the dashboard to refresh balance data for an agent."""
+        await self._request(
+            "POST",
+            f"/api/v1/agents/{agent_id}/notify",
+            use_operator_key=False,
+        )
+
     async def update_policy(
         self,
         agent_id: str,

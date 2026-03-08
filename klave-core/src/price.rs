@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use crate::error::KlaveError;
+use crate::error::{KlaveError, Result};
 
 const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
 const JUPITER_PRICE_URL: &str = "https://api.jup.ag/price/v3";
@@ -13,6 +13,7 @@ struct PriceCache {
     fetched_at: i64,
 }
 
+// #[derive(Clone)]
 pub struct PriceFeed {
     client: reqwest::Client,
     api_key: Option<String>,
@@ -34,11 +35,11 @@ impl PriceFeed {
     /// Convert lamports to USD using the cached SOL/USD price.
     /// Returns 0.0 if the price feed is unavailable (effectively disabling USD limits).
     pub async fn lamports_to_usd(&self, lamports: u64) -> f64 {
-        let price = self._get_sol_price().await;
+        let price = self.get_sol_price().await;
         (lamports as f64 / 1e9) * price
     }
 
-    async fn _get_sol_price(&self) -> f64 {
+    async fn get_sol_price(&self) -> f64 {
         let now = chrono::Utc::now().timestamp();
 
         {
@@ -48,7 +49,7 @@ impl PriceFeed {
             }
         }
 
-        match self._fetch_sol_price().await {
+        match self.fetch_sol_price().await {
             Ok(price) => {
                 let mut cache = self.cache.write().await;
                 cache.sol_usd = price;
@@ -62,7 +63,7 @@ impl PriceFeed {
         }
     }
 
-    async fn _fetch_sol_price(&self) -> Result<f64, KlaveError> {
+    async fn fetch_sol_price(&self) -> Result<f64> {
         let mut req = self
             .client
             .get(JUPITER_PRICE_URL)

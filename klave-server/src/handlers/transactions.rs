@@ -100,8 +100,102 @@ pub async fn execute_transaction(
     let (vault_pda, _bump) =
         Pubkey::find_program_address(&[b"vault", agent_pubkey.as_ref()], &program_id);
 
-    let mut instructions = Vec::new();
+    let (instructions, policy_req) = match build_instructions(
+        &payload,
+        agent_pubkey,
+        vault_pda,
+        program_id,
+        agent.is_active,
+    ) {
+        Ok(res) => res,
+        Err((status, msg)) => return ApiResponse::<()>::error(status, msg).into_response(),
+    };
 
+    let payload_amount = payload.amount.unwrap_or(0);
+
+    let past_spend_usd = state
+        .audit_store
+        .sum_daily_spend(&agent.id)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to fetch daily spend");
+            ApiResponse::<()>::error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to assess daily spend limit".to_string(),
+            )
+            .into_response()
+        })
+        .unwrap_or(0.0);
+    let tx_usd_value = state.price_feed.lamports_to_usd(payload_amount).await;
+    let daily_spend_usd = past_spend_usd + tx_usd_value;
+
+    if let Err(violations) = PolicyEngine::evaluate(&policy, &policy_req, daily_spend_usd) {
+        let violation_strings: Vec<String> = violations.iter().map(|val| val.to_string()).collect();
+        write_audit_entry(
+            state.clone(),
+            agent.id.clone(),
+            policy_req.instruction_type.clone(),
+            "rejected".to_string(),
+            "".to_string(),
+            payload_amount,
+            tx_usd_value,
+        )
+        .await;
+        return ApiResponse::<()>::error(
+            StatusCode::FORBIDDEN,
+            format!("Policy Violations: {:?}", violation_strings),
+        )
+        .into_response();
+    }
+
+    let (tx_sig, via_kora) =
+        match sign_and_broadcast(&state, &agent_id, agent_pubkey, &instructions).await {
+            Ok(res) => res,
+            Err(resp) => return resp,
+        };
+
+    write_audit_entry(
+        state.clone(),
+        agent.id.clone(),
+        policy_req.instruction_type.clone(),
+        "confirmed".to_string(),
+        tx_sig.to_string(),
+        payload_amount,
+        tx_usd_value,
+    )
+    .await;
+
+    tracing::info!(
+        agent_id = %agent.id,
+        instruction = ?policy_req.instruction_type,
+        signature = %tx_sig,
+        "Transaction executed successfully"
+    );
+
+    let _ = state.event_tx.send(ServerEvent::TransactionExecuted {
+        signature: tx_sig.to_string(),
+        agent_id: agent_id.clone(),
+    });
+
+    spawn_transaction_confirmation_task(state.clone(), agent_id, agent_pubkey, vault_pda, tx_sig);
+
+    ApiResponse::success(
+        GatewayResponse {
+            signature: tx_sig.to_string(),
+            via_kora,
+        },
+        "transaction sent",
+    )
+    .into_response()
+}
+
+fn build_instructions(
+    payload: &GatewayRequest,
+    agent_pubkey: Pubkey,
+    vault_pda: Pubkey,
+    program_id: Pubkey,
+    is_active: bool,
+) -> Result<(Vec<Instruction>, TransactionRequest), (StatusCode, String)> {
     let instruction_type = match payload.instruction_type.as_str() {
         "sol_transfer" => InstructionType::SolTransfer,
         "initialize_vault" => InstructionType::InitializeVault,
@@ -110,42 +204,32 @@ pub async fn execute_transaction(
         "agent_withdrawal" => InstructionType::AgentWithdrawal,
         "close_vault" => InstructionType::CloseVault,
         _ => {
-            return ApiResponse::<()>::error(
+            return Err((
                 StatusCode::BAD_REQUEST,
                 "Unknown instruction type".to_string(),
-            )
-            .into_response();
+            ));
         }
     };
 
+    let payload_amount = payload.amount.unwrap_or(0);
+    let mut instructions = Vec::new();
     let mut policy_req = TransactionRequest {
         instruction_type: instruction_type.clone(),
-        lamports: payload.amount.map(|v| v as i64),
+        lamports: payload.amount.map(|val| val as i64),
         program_ids: vec![],
         mints: vec![],
         destination: payload.destination.clone(),
         slippage_bps: None,
-        is_active: agent.is_active,
+        is_active,
     };
-
-    let payload_amount = payload.amount.unwrap_or(0);
 
     let get_anchor_pubkey =
         |key: Pubkey| anchor_lang::prelude::Pubkey::new_from_array(key.to_bytes());
 
     match instruction_type {
         InstructionType::SolTransfer | InstructionType::AgentWithdrawal => {
-            let dest_pubkey =
-                match Pubkey::from_str(payload.destination.as_ref().unwrap_or(&"".to_string())) {
-                    Ok(pk) => pk,
-                    Err(_) => {
-                        return ApiResponse::<()>::error(
-                            StatusCode::BAD_REQUEST,
-                            "Invalid destination".to_string(),
-                        )
-                        .into_response();
-                    }
-                };
+            let dest_pubkey = Pubkey::from_str(payload.destination.as_deref().unwrap_or(""))
+                .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid destination".to_string()))?;
 
             instructions.push(transfer(&agent_pubkey, &dest_pubkey, payload_amount));
             policy_req.program_ids.push(SYSTEM_PROGRAM_ID.to_string());
@@ -252,91 +336,52 @@ pub async fn execute_transaction(
         _ => {}
     }
 
-    let past_spend_usd = match state.audit_store.sum_daily_spend(&agent.id).await {
-        Ok(sum) => sum,
-        Err(e) => {
-            tracing::error!(error = %e, "failed to fetch daily spend");
-            return ApiResponse::<()>::error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to assess daily spend limit".to_string(),
-            )
-            .into_response();
-        }
-    };
-    let tx_usd_value = state.price_feed.lamports_to_usd(payload_amount).await;
-    let daily_spend_usd = past_spend_usd + tx_usd_value;
+    Ok((instructions, policy_req))
+}
 
-    if let Err(violations) = PolicyEngine::evaluate(&policy, &policy_req, daily_spend_usd) {
-        let violation_strings: Vec<String> = violations.iter().map(|val| val.to_string()).collect();
-        let entry = NewAuditEntry {
-            agent_id: agent.id.clone(),
-            instruction_type: policy_req.instruction_type.to_string(),
-            status: "rejected".to_string(),
-            tx_signature: None,
-            policy_violations: Some(violation_strings.clone()),
-            metadata: None,
-        };
-        let _ = state.audit_store.append(&entry).await;
-        return ApiResponse::<()>::error(
-            StatusCode::FORBIDDEN,
-            format!("Policy Violations: {:?}", violation_strings),
-        )
-        .into_response();
-    }
+async fn sign_and_broadcast(
+    state: &AppState,
+    agent_id: &str,
+    agent_pubkey: Pubkey,
+    instructions: &[Instruction],
+) -> Result<(Signature, bool), Response> {
+    let signer = state.agent_signer.load(agent_id).await.map_err(|e| {
+        ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+    })?;
 
-    let signer = match state.agent_signer.load(&agent_id).await {
-        Ok(signer) => signer,
-        Err(e) => {
-            return ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-                .into_response();
-        }
-    };
+    let recent_blockhash = state
+        .kora_gateway
+        .get_latest_blockhash()
+        .await
+        .map_err(|e| {
+            ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                .into_response()
+        })?;
 
-    let recent_blockhash = match state.kora_gateway.get_latest_blockhash().await {
-        Ok(hash) => hash,
-        Err(e) => {
-            return ApiResponse::<()>::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-                .into_response();
-        }
-    };
+    let kora_pubkey = Pubkey::from_str(&state.config.kora_pubkey).unwrap_or(agent_pubkey);
+    let mut message = Message::new(instructions, Some(&kora_pubkey));
 
-    let kora_pubkey = match Pubkey::from_str(&state.config.kora_pubkey) {
-        Ok(pk) => pk,
-        Err(_) => agent_pubkey, // Fallback to agent if Kora pubkey is bad
-    };
-
-    let mut message = Message::new(&instructions, Some(&kora_pubkey));
     message.recent_blockhash = recent_blockhash;
 
-    // Legacy transaction properly allocates signature slots for both the fee payer (Kora) and the agent.
     let mut legacy_tx = Transaction::new_unsigned(message.clone());
 
     let message_data = message.serialize();
-    let keychain_signature = match signer.sign_message(&message_data).await {
-        Ok(s) => s,
-        Err(e) => {
-            return ApiResponse::<()>::error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to sign message: {}", e),
-            )
-            .into_response();
-        }
-    };
+    let keychain_signature = signer.sign_message(&message_data).await.map_err(|e| {
+        ApiResponse::<()>::error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to sign: {}", e),
+        )
+        .into_response()
+    })?;
 
-    let signature = match Signature::try_from(keychain_signature.as_ref()) {
-        Ok(sig) => sig,
-        Err(e) => {
-            return ApiResponse::<()>::error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Invalid signature bytes: {}", e),
-            )
-            .into_response();
-        }
-    };
+    let signature = Signature::try_from(keychain_signature.as_ref()).map_err(|e| {
+        ApiResponse::<()>::error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Invalid signature: {}", e),
+        )
+        .into_response()
+    })?;
 
-    // Find the agent's position in the signature array and insert the signature.
-    // The fee payer (Kora) is always at index 0. If the agent is also a required signer,
-    // they will be at index 1 (or 0 if they are paying their own fee).
     let mut signers_found = false;
     for (idx, pk) in message.account_keys.iter().enumerate() {
         if pk == &agent_pubkey && message.is_signer(idx) {
@@ -346,84 +391,24 @@ pub async fn execute_transaction(
     }
 
     if !signers_found {
-        return ApiResponse::<()>::error(
+        return Err(ApiResponse::<()>::error(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Agent pubkey not found in transaction signers".to_string(),
+            "Agent pubkey not found in signers".to_string(),
         )
-        .into_response();
+        .into_response());
     }
 
-    let versioned_tx = VersionedTransaction::from(legacy_tx);
-
-    let (tx_sig, via_kora) = match state.kora_gateway.send_transaction(&versioned_tx).await {
-        Ok(res) => res,
-        Err(e) => {
-            return ApiResponse::<()>::error(
+    state
+        .kora_gateway
+        .send_transaction(&VersionedTransaction::from(legacy_tx))
+        .await
+        .map_err(|e| {
+            ApiResponse::<()>::error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Transaction failed: {}", e),
             )
-            .into_response();
-        }
-    };
-
-    let usd_value = state.price_feed.lamports_to_usd(payload_amount).await;
-    write_audit_entry(
-        state.clone(),
-        agent.id.clone(),
-        policy_req.instruction_type.clone(),
-        "confirmed".to_string(),
-        tx_sig.to_string(),
-        payload_amount,
-        usd_value,
-    )
-    .await;
-
-    tracing::info!(
-        agent_id = %agent.id,
-        instruction = ?policy_req.instruction_type,
-        signature = %tx_sig,
-        "Transaction executed successfully"
-    );
-
-    let tx_sig_str = tx_sig.to_string();
-    let _ = state.event_tx.send(ServerEvent::TransactionExecuted {
-        signature: tx_sig_str.clone(),
-        agent_id: agent_id.clone(),
-    });
-
-    {
-        let state = state.clone();
-        let agent_id = agent_id.clone();
-        let sig = tx_sig;
-        tokio::spawn(async move {
-            state.kora_gateway.confirm_transaction(&sig).await;
-            let (sol, vault) = state
-                .kora_gateway
-                .get_balances(&agent_pubkey, &vault_pda)
-                .await
-                .unwrap_or((0, 0));
-            let tokens = state
-                .kora_gateway
-                .get_token_balances(&agent_pubkey)
-                .await
-                .unwrap_or_default();
-            let _ = state.event_tx.send(ServerEvent::BalanceUpdated {
-                agent_id,
-                sol_lamports: sol,
-                vault_lamports: vault,
-                tokens,
-            });
-        });
-    }
-
-    ApiResponse::success(
-        GatewayResponse {
-            signature: tx_sig_str,
-            via_kora,
-        },
-        "transaction sent",
-    )
-    .into_response()
+            .into_response()
+        })
 }
 
 async fn write_audit_entry(
@@ -454,4 +439,39 @@ async fn write_audit_entry(
         metadata,
     };
     let _ = state.audit_store.append(&entry).await;
+}
+
+fn spawn_transaction_confirmation_task(
+    state: AppState,
+    agent_id: String,
+    agent_pubkey: Pubkey,
+    vault_pda: Pubkey,
+    tx_sig: Signature,
+) {
+    tokio::spawn(async move {
+        state.kora_gateway.confirm_transaction(&tx_sig).await;
+        let (sol, vault) = match state
+            .kora_gateway
+            .get_balances(&agent_pubkey, &vault_pda)
+            .await
+        {
+            Ok(balances) => balances,
+            Err(e) => {
+                tracing::warn!(error = %e, agent_id = %agent_id, "failed to fetch balances for SSE update");
+                (0, 0)
+            }
+        };
+        let tokens = state
+            .kora_gateway
+            .get_token_balances(&agent_pubkey)
+            .await
+            .unwrap_or_default();
+
+        let _ = state.event_tx.send(ServerEvent::BalanceUpdated {
+            agent_id,
+            sol_lamports: sol,
+            vault_lamports: vault,
+            tokens,
+        });
+    });
 }
