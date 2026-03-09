@@ -67,7 +67,7 @@ cargo install --path ./klave-cli
 # Initialize - generates .env with all secrets (JUPITER_API_KEY and LLM keys (optional) should be set manually)
 klave init
 
-# Deploy the treasury program to devnet (optional)
+# Deploy the treasury program to devnet
 klave deploy
 
 # Fund the Kora fee-payer (devnet). If CLI airdrop fails, use https://faucet.solana.com/ with the pubkey printed below:

@@ -39,6 +39,23 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Configuration template (.env.example) not found.".into());
     }
 
+    let kora_example = root.join("kora.example.toml");
+    let kora_config = root.join("kora.toml");
+    if !kora_config.exists() && kora_example.exists() {
+        fs::copy(&kora_example, &kora_config)?;
+        ui::flow_line(&format!("Created {} from template", ui::info("kora.toml")));
+    }
+
+    let signer_example = root.join("signers.example.toml");
+    let signer_config = root.join("signers.toml");
+    if !signer_config.exists() && signer_example.exists() {
+        fs::copy(&signer_example, &signer_config)?;
+        ui::flow_line(&format!(
+            "Created {} from template",
+            ui::info("signers.toml")
+        ));
+    }
+
     let content = fs::read_to_string(&env_path)?;
     let mut lines: Vec<String> = content.lines().map(String::from).collect();
 

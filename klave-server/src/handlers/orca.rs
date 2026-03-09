@@ -371,9 +371,15 @@ async fn build_and_sign_tx(
                 .into_response()
         })?;
 
-    let kora_pubkey = Pubkey::from_str(&state.config.kora_pubkey).unwrap_or(agent_pubkey);
+    let kora_reachable = state.kora_gateway.is_reachable().await;
+    let fee_payer = if kora_reachable {
+        Pubkey::from_str(&state.config.kora_pubkey).unwrap_or(agent_pubkey)
+    } else {
+        tracing::warn!("Kora unreachable, falling back to Agent as fee payer");
+        agent_pubkey
+    };
 
-    let message = Message::new(&orca_result.instructions, Some(&kora_pubkey));
+    let message = Message::new(&orca_result.instructions, Some(&fee_payer));
     let mut tx = Transaction::new_unsigned(message);
     tx.message.recent_blockhash = blockhash;
 

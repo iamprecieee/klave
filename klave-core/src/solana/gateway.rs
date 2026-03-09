@@ -45,6 +45,26 @@ impl KoraGateway {
             .map_err(|e| KlaveError::Internal(e.to_string()))
     }
 
+    pub async fn is_reachable(&self) -> bool {
+        if self.kora_rpc_url.is_empty() {
+            return false;
+        }
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_millis(500))
+            .build()
+            .unwrap_or_else(|_| Client::new());
+
+        match client.get(&self.kora_rpc_url).send().await {
+            Ok(resp) => {
+                resp.status().is_success()
+                    || resp.status() == reqwest::StatusCode::METHOD_NOT_ALLOWED
+                    || resp.status() == reqwest::StatusCode::NOT_FOUND
+            }
+            Err(_) => false,
+        }
+    }
+
     pub async fn get_balance(&self, pubkey: &Pubkey) -> Result<u64> {
         self.rpc_client
             .get_balance(pubkey)
@@ -67,59 +87,71 @@ impl KoraGateway {
         &self,
         owner: &Pubkey,
     ) -> Result<Vec<crate::agent::model::TokenBalance>> {
-        let accounts = self
-            .rpc_client
-            .get_token_accounts_by_owner(
+        let spl_token_program = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+            .parse::<Pubkey>()
+            .map_err(|e| KlaveError::Internal(format!("Invalid legacy token program ID: {}", e)))?;
+
+        let spl_token_2022_program = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+            .parse::<Pubkey>()
+            .map_err(|e| KlaveError::Internal(format!("Invalid Token-2022 program ID: {}", e)))?;
+
+        let (legacy_res, extension_res) = tokio::join!(
+            self.rpc_client.get_token_accounts_by_owner(
                 owner,
-                TokenAccountsFilter::ProgramId(
-                    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-                        .parse()
-                        .unwrap(),
-                ),
+                TokenAccountsFilter::ProgramId(spl_token_program),
+            ),
+            self.rpc_client.get_token_accounts_by_owner(
+                owner,
+                TokenAccountsFilter::ProgramId(spl_token_2022_program),
             )
-            .await
-            .map_err(|e| KlaveError::Internal(e.to_string()))?;
+        );
+
+        let mut all_accounts = legacy_res.map_err(|e| KlaveError::Internal(e.to_string()))?;
+        if let Ok(extension_accounts) = extension_res {
+            all_accounts.extend(extension_accounts);
+        }
 
         let mut balances = Vec::new();
-        for keyed_account in accounts {
-            if let UiAccountData::Json(parsed) = keyed_account.account.data
-                && parsed.program == "spl-token"
-                && parsed.parsed.get("type").and_then(|t| t.as_str()) == Some("account")
-            {
-                let info = parsed
-                    .parsed
-                    .get("info")
-                    .ok_or_else(|| KlaveError::Internal("Missing info".into()))?;
-                let mint = info
-                    .get("mint")
-                    .and_then(|m| m.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-                let token_amount = info
-                    .get("tokenAmount")
-                    .ok_or_else(|| KlaveError::Internal("Missing tokenAmount".into()))?;
+        for keyed_account in all_accounts {
+            if let UiAccountData::Json(parsed) = keyed_account.account.data {
+                if (parsed.program == "spl-token" || parsed.program == "spl-token-2022")
+                    && parsed.parsed.get("type").and_then(|t| t.as_str()) == Some("account")
+                {
+                    let info = parsed
+                        .parsed
+                        .get("info")
+                        .ok_or_else(|| KlaveError::Internal("Missing info".into()))?;
+                    let mint = info
+                        .get("mint")
+                        .and_then(|m| m.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let token_amount = info
+                        .get("tokenAmount")
+                        .ok_or_else(|| KlaveError::Internal("Missing tokenAmount".into()))?;
 
-                let amount_str = token_amount
-                    .get("amount")
-                    .and_then(|a| a.as_str())
-                    .unwrap_or("0");
-                let amount = amount_str.parse().unwrap_or(0);
-                let decimals = token_amount
-                    .get("decimals")
-                    .and_then(|d| d.as_u64())
-                    .unwrap_or(0) as u8;
-                let ui_amount = token_amount
-                    .get("uiAmount")
-                    .and_then(|u| u.as_f64())
-                    .unwrap_or(0.0);
+                    let amount_str = token_amount
+                        .get("amount")
+                        .and_then(|a| a.as_str())
+                        .unwrap_or("0");
+                    let amount = amount_str.parse().unwrap_or(0);
+                    let decimals = token_amount
+                        .get("decimals")
+                        .and_then(|d| d.as_u64())
+                        .unwrap_or(0) as u8;
+                    let ui_amount = token_amount
+                        .get("uiAmount")
+                        .and_then(|u| u.as_f64())
+                        .unwrap_or(0.0);
 
-                if amount > 0 {
-                    balances.push(TokenBalance {
-                        mint,
-                        amount,
-                        decimals,
-                        ui_amount,
-                    });
+                    if amount > 0 {
+                        balances.push(TokenBalance {
+                            mint,
+                            amount,
+                            decimals,
+                            ui_amount,
+                        });
+                    }
                 }
             }
         }
