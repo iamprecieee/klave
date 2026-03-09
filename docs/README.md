@@ -297,4 +297,4 @@ All configuration lives in `.env`. Run `klave init` to auto-generate secrets.
 
 ## License
 
-MIT
+[MIT](../LICENSE)

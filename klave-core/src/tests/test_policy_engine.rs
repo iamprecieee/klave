@@ -170,3 +170,41 @@ fn test_reject_sol_transfer_destination() {
         ))
     );
 }
+
+#[test]
+fn test_swap_static_rejects_unlisted_program() {
+    let mut policy = test_policy();
+    policy.allowed_programs = vec!["prog1".to_string()]; // no whirlpool
+
+    let result = PolicyEngine::check_swap_static(
+        &policy,
+        "mint_a",
+        "mint_b",
+        30,
+        &["whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc".to_string()],
+    );
+
+    let violations = result.unwrap_err();
+    assert!(matches!(
+        violations[0],
+        PolicyViolation::ProgramNotAllowed(_)
+    ));
+}
+
+#[test]
+fn test_swap_static_passes_with_listed_program() {
+    let mut policy = test_policy();
+    policy
+        .allowed_programs
+        .push("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc".to_string());
+
+    let result = PolicyEngine::check_swap_static(
+        &policy,
+        "mint_a",
+        "mint_b",
+        30,
+        &["whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc".to_string()],
+    );
+
+    assert!(result.is_ok());
+}
