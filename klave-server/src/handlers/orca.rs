@@ -8,7 +8,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use klave_core::{
-    agent::model::{Agent, AgentPolicy, SwapQuote},
+    agent::model::{Agent, AgentPolicy, ORCA_WHIRLPOOL_PROGRAM_ID, SwapQuote},
     audit::store::NewAuditEntry,
     policy::engine::{InstructionType, PolicyEngine},
 };
@@ -280,6 +280,7 @@ async fn enforce_policies(
         &payload.input_mint,
         output_mint,
         slippage_bps as i32,
+        &[ORCA_WHIRLPOOL_PROGRAM_ID.to_string()],
     ) {
         let violations: Vec<String> = violations.iter().map(|val| val.to_string()).collect();
         write_rejected_audit(state, &agent.id, violations.clone()).await;

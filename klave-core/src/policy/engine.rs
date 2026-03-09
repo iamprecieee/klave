@@ -164,8 +164,15 @@ impl PolicyEngine {
         input_mint: &str,
         output_mint: &str,
         slippage_bps: i32,
+        program_ids: &[String],
     ) -> Result<(), Vec<PolicyViolation>> {
         let mut violations = Vec::new();
+
+        for pid in program_ids {
+            if !policy.allowed_programs.contains(pid) {
+                violations.push(PolicyViolation::ProgramNotAllowed(pid.clone()));
+            }
+        }
 
         if !policy.token_allowlist.contains(&input_mint.to_string()) {
             violations.push(PolicyViolation::TokenNotAllowed(input_mint.to_string()));
