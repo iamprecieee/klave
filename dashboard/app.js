@@ -247,19 +247,12 @@ function renderFeed(entries) {
   }
 }
 
-let API_KEY = localStorage.getItem("klave_operator_key");
-const urlKey = new URLSearchParams(window.location.search).get("key");
-
-if (urlKey) {
-  API_KEY = urlKey;
-  localStorage.setItem("klave_operator_key", API_KEY);
-  window.history.replaceState({}, document.title, window.location.pathname);
-}
+let API_KEY = sessionStorage.getItem("klave_operator_key");
 
 if (!API_KEY) {
   API_KEY = prompt("Enter KLAVE Operator API Key:") || "";
   if (API_KEY) {
-    localStorage.setItem("klave_operator_key", API_KEY);
+    sessionStorage.setItem("klave_operator_key", API_KEY);
   }
 }
 

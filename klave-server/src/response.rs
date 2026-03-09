@@ -22,6 +22,11 @@ impl<T: Serialize> ApiResponse<T> {
         }
     }
 
+    pub fn with_status(mut self, status: StatusCode) -> Self {
+        self.status_code = status.as_u16();
+        self
+    }
+
     pub fn created(data: T, message: impl Into<String>) -> Self {
         Self {
             success: true,

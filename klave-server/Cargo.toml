@@ -18,6 +18,7 @@ solana-client = { workspace = true }
 solana-keychain = { workspace = true }
 solana-sdk = { workspace = true }
 solana-system-interface = { workspace = true }
+sqlx = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
@@ -25,6 +26,7 @@ uuid = { workspace = true }
 anchor-lang = "0.32.1"
 anyhow = "1.0.98"
 axum = "0.8.8"
+dashmap = "6.1.0"
 futures-util = "0.3.32"
 subtle = "2.6.1"
 tokio-stream = { version = "0.1.18", features = ["sync"] }

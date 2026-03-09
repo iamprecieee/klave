@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 use uuid::Uuid;
 
 use anchor_lang::{InstructionData, ToAccountMetas};
@@ -110,6 +110,13 @@ pub async fn execute_transaction(
         Ok(res) => res,
         Err((status, msg)) => return ApiResponse::<()>::error(status, msg).into_response(),
     };
+
+    let lock_arc = state
+        .agent_locks
+        .entry(agent.id.clone())
+        .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+        .clone();
+    let _agent_lock = lock_arc.lock().await;
 
     let payload_amount = payload.amount.unwrap_or(0);
 

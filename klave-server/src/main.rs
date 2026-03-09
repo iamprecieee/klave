@@ -78,6 +78,7 @@ async fn async_main() -> anyhow::Result<()> {
         orca_client,
         price_feed,
         event_tx,
+        agent_locks: Arc::new(dashmap::DashMap::new()),
     };
 
     let cors = if state.config.allowed_origins.contains(&"*".to_string()) {

@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 use uuid::Uuid;
 
 use axum::{
@@ -113,6 +113,13 @@ pub async fn execute_swap(
         }
     };
     let slippage_bps = payload.slippage_bps.unwrap_or(policy.slippage_bps as u16);
+
+    let lock_arc = state
+        .agent_locks
+        .entry(agent.id.clone())
+        .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+        .clone();
+    let _agent_lock = lock_arc.lock().await;
 
     let swap_usd_value =
         match enforce_policies(&state, &agent, &policy, &payload, slippage_bps).await {

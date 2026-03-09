@@ -6,6 +6,5 @@ pub mod error;
 pub mod policy;
 pub mod price;
 pub mod solana;
-
 #[cfg(test)]
 mod tests;

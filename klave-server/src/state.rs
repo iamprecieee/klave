@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use dashmap::DashMap;
 use klave_core::{
     agent::{repository::AgentRepository, signer::AgentSigner},
     audit::store::AuditStore,
@@ -20,4 +21,5 @@ pub struct AppState {
     pub orca_client: Arc<OrcaClient>,
     pub price_feed: Arc<PriceFeed>,
     pub event_tx: broadcast::Sender<ServerEvent>,
+    pub agent_locks: Arc<DashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }

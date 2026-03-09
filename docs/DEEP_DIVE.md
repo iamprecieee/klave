@@ -162,9 +162,9 @@ while True:
 
 | Concern        | Approach                                                                                |
 | -------------- | --------------------------------------------------------------------------------------- |
-| Key generation | `Keypair::new()` — standard Ed25519 keypair                                              |
+| Key generation | `Keypair::new()` — standard Ed25519 keypair                                             |
 | Storage        | AES-256-GCM encrypted, SQLite                                                           |
-| Master key     | Derived from `KLAVE_ENCRYPTION_KEY` env var                                              |
+| Master key     | Derived from `KLAVE_ENCRYPTION_KEY` env var                                             |
 | Key exposure   | Private keys never leave the server process. API responses only include the public key. |
 | Key rotation   | Delete agent + create new one. Keys are tied to agent identity.                         |
 
@@ -176,6 +176,16 @@ while True:
 - **Constant-Time Comparison**: API keys are evaluated using constant-time string equality (`subtle::ConstantTimeEq`) in the Axum middleware to prevent timing attacks.
 - **Per-agent isolation**: An agent's keypair is loaded only when executing transactions for that specific agent.
 - **No cross-agent operations**: Agent A cannot sign with Agent B's key or access Agent B's vault.
+
+### Concurrency & TOCTOU Protection
+
+Policy evaluation in KLAVE is vulnerable to **Time-of-Check Time-of-Use (TOCTOU)** race conditions, particularly for cumulative limits like `daily_spend_limit_usd`. If an attacker fires 10 concurrent requests at the exact same millisecond, they could potentially bypass the limit if all requests are evaluated before any of them commit their expenditure to the audit log.
+
+To prevent this, KLAVE implements **agent-level serialization**:
+
+- **Atomic Locks**: The server maintains a `DashMap` of `tokio::sync::Mutex` locks in the `AppState`.
+- **Per-Agent Mutex**: Every transaction request for Agent X must acquire a Mutex indexed by the agent's UUID before evaluation begins.
+- **Execution**: The lock is held through policy evaluation, transaction signing, and audit logging. This ensuring that only one transaction is being processed per agent at a time, making policy enforcement strictly atomic.
 
 ### Defense in Depth
 
