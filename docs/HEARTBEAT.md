@@ -121,7 +121,7 @@ X-API-Key: <key>
 | Action           | `allowed_programs`                                                                 |
 | ---------------- | ---------------------------------------------------------------------------------- |
 | SOL transfers    | `11111111111111111111111111111111`                                                 |
-| Vault operations | `11111111111111111111111111111111`, `4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz` |
+| Vault operations | `11111111111111111111111111111111`, `3nKoeBAeLjcePc7pJPfdZpohsAbUR7U7pJ3HztovbyFx` |
 | Token swaps      | `11111111111111111111111111111111`, `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc`  |
 
 ---

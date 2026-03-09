@@ -55,7 +55,7 @@ To override defaults, pass a full policy object:
   "policy": {
     "allowed_programs": [
       "11111111111111111111111111111111",
-      "4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz",
+      "3nKoeBAeLjcePc7pJPfdZpohsAbUR7U7pJ3HztovbyFx",
       "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
     ],
     "token_allowlist": [

@@ -106,9 +106,16 @@ impl KoraGateway {
             )
         );
 
-        let mut all_accounts = legacy_res.map_err(|e| KlaveError::Internal(e.to_string()))?;
-        if let Ok(extension_accounts) = extension_res {
-            all_accounts.extend(extension_accounts);
+        let mut all_accounts = Vec::new();
+
+        match legacy_res {
+            Ok(accounts) => all_accounts.extend(accounts),
+            Err(e) => tracing::error!("Failed to fetch legacy token accounts: {}", e),
+        }
+
+        match extension_res {
+            Ok(accounts) => all_accounts.extend(accounts),
+            Err(e) => tracing::error!("Failed to fetch Token-2022 accounts: {}", e),
         }
 
         let mut balances = Vec::new();
@@ -117,18 +124,19 @@ impl KoraGateway {
                 if (parsed.program == "spl-token" || parsed.program == "spl-token-2022")
                     && parsed.parsed.get("type").and_then(|t| t.as_str()) == Some("account")
                 {
-                    let info = parsed
-                        .parsed
-                        .get("info")
-                        .ok_or_else(|| KlaveError::Internal("Missing info".into()))?;
+                    let info = match parsed.parsed.get("info") {
+                        Some(info) => info,
+                        None => continue,
+                    };
                     let mint = info
                         .get("mint")
                         .and_then(|m| m.as_str())
                         .unwrap_or_default()
                         .to_string();
-                    let token_amount = info
-                        .get("tokenAmount")
-                        .ok_or_else(|| KlaveError::Internal("Missing tokenAmount".into()))?;
+                    let token_amount = match info.get("tokenAmount") {
+                        Some(ta) => ta,
+                        None => continue,
+                    };
 
                     let amount_str = token_amount
                         .get("amount")
@@ -155,6 +163,12 @@ impl KoraGateway {
                 }
             }
         }
+
+        tracing::debug!(
+            owner = %owner,
+            count = balances.len(),
+            "fetched token balances"
+        );
 
         Ok(balances)
     }

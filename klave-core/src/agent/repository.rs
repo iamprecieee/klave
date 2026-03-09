@@ -53,25 +53,30 @@ impl AgentRepository {
         let pubkey = keypair.pubkey().to_string();
         let encrypted_keypair = crypto::encrypt(&keypair.to_bytes(), &self.encryption_key)?;
 
-        let mut allowed_programs = req.policy.allowed_programs.clone();
+        let mut allowed_programs = req.policy.allowed_programs.clone().unwrap_or_default();
         if allowed_programs.is_empty() {
             allowed_programs = default_programs();
         }
 
-        let mut daily_spend_limit_usd = req.policy.daily_spend_limit_usd;
+        let max_lamports_per_tx = req.policy.max_lamports_per_tx.unwrap_or(1_000_000_000);
+
+        let mut daily_spend_limit_usd = req.policy.daily_spend_limit_usd.unwrap_or(0.0);
         if daily_spend_limit_usd == 0.0 {
             daily_spend_limit_usd = 100.0;
         }
 
-        let mut daily_swap_volume_usd = req.policy.daily_swap_volume_usd;
+        let mut daily_swap_volume_usd = req.policy.daily_swap_volume_usd.unwrap_or(0.0);
         if daily_swap_volume_usd == 0.0 {
             daily_swap_volume_usd = 500.0;
         }
 
+        let slippage_bps = req.policy.slippage_bps.unwrap_or(50);
+        let token_allowlist = req.policy.token_allowlist.clone().unwrap_or_default();
+        let withdrawal_destinations = req.policy.withdrawal_destinations.clone().unwrap_or_default();
+
         let allowed_programs_json = serde_json::to_string(&allowed_programs)?;
-        let token_allowlist_json = serde_json::to_string(&req.policy.token_allowlist)?;
-        let withdrawal_destinations_json =
-            serde_json::to_string(&req.policy.withdrawal_destinations)?;
+        let token_allowlist_json = serde_json::to_string(&token_allowlist)?;
+        let withdrawal_destinations_json = serde_json::to_string(&withdrawal_destinations)?;
 
         sqlx::query(
             "INSERT INTO agents (id, pubkey, label, is_active, created_at, policy_id, encrypted_keypair, api_key_hash, encrypted_api_key) \
@@ -98,11 +103,11 @@ impl AgentRepository {
         .bind(&policy_id)
         .bind(&agent_id)
         .bind(&allowed_programs_json)
-        .bind(req.policy.max_lamports_per_tx)
+        .bind(max_lamports_per_tx)
         .bind(&token_allowlist_json)
         .bind(daily_spend_limit_usd)
         .bind(daily_swap_volume_usd)
-        .bind(req.policy.slippage_bps)
+        .bind(slippage_bps)
         .bind(&withdrawal_destinations_json)
         .bind(now)
         .execute(&self.pool)
@@ -178,10 +183,38 @@ impl AgentRepository {
         agent_id: &str,
         input: &AgentPolicyInput,
     ) -> Result<AgentPolicy> {
+        let existing = self
+            .find_policy(agent_id)
+            .await?
+            .ok_or_else(|| KlaveError::PolicyNotFound(agent_id.to_string()))?;
+
+        let allowed_programs = input
+            .allowed_programs
+            .clone()
+            .unwrap_or(existing.allowed_programs);
+        let max_lamports_per_tx = input
+            .max_lamports_per_tx
+            .unwrap_or(existing.max_lamports_per_tx);
+        let token_allowlist = input
+            .token_allowlist
+            .clone()
+            .unwrap_or(existing.token_allowlist);
+        let daily_spend_limit_usd = input
+            .daily_spend_limit_usd
+            .unwrap_or(existing.daily_spend_limit_usd);
+        let daily_swap_volume_usd = input
+            .daily_swap_volume_usd
+            .unwrap_or(existing.daily_swap_volume_usd);
+        let slippage_bps = input.slippage_bps.unwrap_or(existing.slippage_bps);
+        let withdrawal_destinations = input
+            .withdrawal_destinations
+            .clone()
+            .unwrap_or(existing.withdrawal_destinations);
+
         let now = Utc::now().timestamp();
-        let allowed_programs_json = serde_json::to_string(&input.allowed_programs)?;
-        let token_allowlist_json = serde_json::to_string(&input.token_allowlist)?;
-        let withdrawal_destinations_json = serde_json::to_string(&input.withdrawal_destinations)?;
+        let allowed_programs_json = serde_json::to_string(&allowed_programs)?;
+        let token_allowlist_json = serde_json::to_string(&token_allowlist)?;
+        let withdrawal_destinations_json = serde_json::to_string(&withdrawal_destinations)?;
 
         let result = sqlx::query(
             "UPDATE agent_policies SET \
@@ -191,11 +224,11 @@ impl AgentRepository {
              WHERE agent_id = ?",
         )
         .bind(&allowed_programs_json)
-        .bind(input.max_lamports_per_tx)
+        .bind(max_lamports_per_tx)
         .bind(&token_allowlist_json)
-        .bind(input.daily_spend_limit_usd)
-        .bind(input.daily_swap_volume_usd)
-        .bind(input.slippage_bps)
+        .bind(daily_spend_limit_usd)
+        .bind(daily_swap_volume_usd)
+        .bind(slippage_bps)
         .bind(&withdrawal_destinations_json)
         .bind(now)
         .bind(agent_id)

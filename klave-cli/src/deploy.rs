@@ -1,4 +1,10 @@
-use std::process::{Command, Stdio};
+use std::{
+    fs,
+    path::Path,
+    process::{Command, Stdio},
+};
+
+use regex::Regex;
 
 use crate::{ui, utils::project_root};
 
@@ -102,6 +108,19 @@ pub fn run(cluster: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     ui::flow_done("Program deployed");
     ui::flow_blank();
+
+    ui::flow_step("Propagating Program ID...");
+    if let Err(e) = propagate_program_id(&root, cluster) {
+        ui::flow_line(&format!(
+            "{} Warning: ID propagation failed: {}",
+            ui::brand("!"),
+            e
+        ));
+    } else {
+        ui::flow_done("Program ID propagated to server, SDK, and docs");
+    }
+    ui::flow_blank();
+
     ui::flow_end(&format!(
         "Treasury {} on {}.",
         ui::brand("live"),
@@ -109,6 +128,61 @@ pub fn run(cluster: &str) -> Result<(), Box<dyn std::error::Error>> {
     ));
 
     println!();
+
+    Ok(())
+}
+
+fn propagate_program_id(root: &Path, _cluster: &str) -> anyhow::Result<()> {
+    let anchor_toml_path = root.join("klave-anchor").join("Anchor.toml");
+    let anchor_toml = fs::read_to_string(&anchor_toml_path)?;
+
+    // Extract new ID from [programs.cluster] or [programs.devnet]
+    let re_id = Regex::new(&format!(r#"klave_anchor\s*=\s*"([^"]+)"#))?;
+    let new_id = re_id
+        .captures(&anchor_toml)
+        .and_then(|cap| cap.get(1))
+        .map(|m| m.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Could not find klave_anchor ID in Anchor.toml"))?;
+
+    // Find old ID from klave-core/src/agent/model.rs
+    let model_rs_path = root
+        .join("klave-core")
+        .join("src")
+        .join("agent")
+        .join("model.rs");
+    let model_rs = fs::read_to_string(&model_rs_path)?;
+    let re_old_id = Regex::new(r#"pub const TREASURY_PROGRAM_ID: &str = "([^"]+)";"#)?;
+    let old_id = re_old_id
+        .captures(&model_rs)
+        .and_then(|cap| cap.get(1))
+        .map(|m| m.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Could not find TREASURY_PROGRAM_ID in model.rs"))?;
+
+    if old_id == new_id {
+        return Ok(());
+    }
+
+    // Update all files
+    let files_to_update = vec![
+        root.join("klave-core")
+            .join("src")
+            .join("agent")
+            .join("model.rs"),
+        root.join("sdk").join("klave").join("models.py"),
+        root.join("kora.example.toml"),
+        root.join("docs").join("README.md"),
+        root.join("docs").join("SKILLS.md"),
+        root.join("docs").join("REGISTER.md"),
+        root.join("docs").join("HEARTBEAT.md"),
+    ];
+
+    for path in files_to_update {
+        if path.exists() {
+            let content = fs::read_to_string(&path)?;
+            let updated = content.replace(old_id, new_id);
+            fs::write(path, updated)?;
+        }
+    }
 
     Ok(())
 }

@@ -479,7 +479,18 @@ fn spawn_orca_confirmation_task(
             .kora_gateway
             .get_token_balances(&agent_pubkey)
             .await
-            .unwrap_or_default();
+            .unwrap_or_else(|e| {
+                tracing::error!(error = %e, agent_id = %agent_id, "failed to fetch token balances for SSE update");
+                Vec::new()
+            });
+
+        tracing::info!(
+            agent_id = %agent_id,
+            tokens_count = tokens.len(),
+            sol_lamports = sol,
+            vault_lamports = vault,
+            "sending balance update SSE"
+        );
 
         let _ = state.event_tx.send(ServerEvent::BalanceUpdated {
             agent_id,

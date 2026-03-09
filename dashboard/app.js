@@ -136,6 +136,15 @@ function updateAgentElement(el, agent, bal, toks) {
     }
   }
 
+  let tokenSection = el.querySelector(".tokens");
+  if (!tokenSection && toks && toks.length > 0) {
+    const div = document.createElement("div");
+    div.className = "tokens";
+    div.innerHTML = `<div class="tokens-head">Token Balances</div><div class="token-list"></div>`;
+    el.appendChild(div);
+    tokenSection = div;
+  }
+
   const tokenList = el.querySelector(".token-list");
   if (tokenList && toks) {
     const rows = toks
@@ -288,7 +297,9 @@ async function poll() {
           balances[a.id] = bal;
           tokens[a.id] = tok;
           entries.push(...hist);
-        } catch { /* skip failed agent */ }
+        } catch {
+          /* skip failed agent */
+        }
       }),
     );
 
@@ -356,7 +367,9 @@ async function connectSSE() {
               const { type, data } = JSON.parse(json);
               handleServerEvent(type, data);
             }
-          } catch { /* malformed SSE data */ }
+          } catch {
+            /* malformed SSE data */
+          }
         }
       }
     }

@@ -64,11 +64,11 @@ git clone https://github.com/iamprecieee/klave.git && cd klave
 # Install the CLI
 cargo install --path ./klave-cli
 
-# Initialize - generates .env with all secrets (JUPITER_API_KEY and LLM keys (optional) should be set manually)
-klave init
-
 # Deploy the treasury program to devnet
 klave deploy
+
+# Initialize - generates .env with all secrets (JUPITER_API_KEY and LLM keys (optional) should be set manually)
+klave init
 
 # Fund the Kora fee-payer (devnet). If CLI airdrop fails, use https://faucet.solana.com/ with the pubkey printed below:
 solana airdrop 2 $(grep KORA_PUBKEY .env | cut -d= -f2) --url devnet
@@ -78,13 +78,7 @@ klave start --with-kora --dashboard
 ```
 
 > [!IMPORTANT]
-> The Treasury Program ID `4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz` is hardcoded in several critical locations for security whitelisting. If you re-deploy to a different ID, you **must** update it in:
->
-> - **On-chain**: `klave-anchor/programs/klave-anchor/src/lib.rs` and `klave-anchor/Anchor.toml`
-> - **Server**: `klave-core/src/agent/model.rs` (the `TREASURY_PROGRAM_ID` constant)
-> - **SDK/Demo**: `sdk/klave/models.py`
-> - **Relayer**: `kora.example.toml` (if using Kora)
-> - **Docs**: `SKILLS.md`, `REGISTER.md`, and `HEARTBEAT.md` (to keep agent context accurate)
+> The Treasury Program ID is automatically updated when you run the deploy command. Ensure `Klave Treasury program` in your kora.toml matches your deployed program ID.
 
 The services should be running on:
 
@@ -112,17 +106,14 @@ The demo runs an autonomous agent following the [HEARTBEAT.md](HEARTBEAT.md) pla
 # In a new terminal (keep klave start running in the first)
 
 # 1. Setup the Python environment
-cd sdk
-uv venv
-source .venv/bin/activate
+cd sdk && uv venv && source .venv/bin/activate
 uv pip install -e ".[langchain]"
 cd ..
 
 # 2. Run the autonomous heartbeat cycle
 # Registration is public; the agent registers itself if no key is provided.
 # The Operator Key is used to sync its policies (simulates a human operator).
-uv run --active klave-sdk-demo \
-    --operator-key $(grep KLAVE_OPERATOR_API_KEY .env | cut -d= -f2)
+uv run --active klave-sdk-demo --operator-key $(grep KLAVE_OPERATOR_API_KEY .env | cut -d= -f2)
 ```
 
 The demo will print the agent's public key for funding if it has less than 0.05 SOL. Use the [Solana Faucet](https://faucet.solana.com/) to fund it if needed.
@@ -296,7 +287,7 @@ All configuration lives in `.env`. Run `klave init` to auto-generate secrets.
 | Problem                             | Solution                                                                                                                                                                                                                                 |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `solana airdrop` fails              | Use [faucet.solana.com](https://faucet.solana.com/) instead — CLI airdrops are heavily rate-limited                                                                                                                                      |
-| `ProgramNotAllowed` on transactions | Add the required program IDs to the agent's `allowed_programs` policy. System Program: `11111111111111111111111111111111`, Treasury: `4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz`, Orca: `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc` |
+| `ProgramNotAllowed` on transactions | Add the required program IDs to the agent's `allowed_programs` policy. System Program: `11111111111111111111111111111111`, Treasury: `3nKoeBAeLjcePc7pJPfdZpohsAbUR7U7pJ3HztovbyFx`, Orca: `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc` |
 | `No .env found`                     | Run `klave init` first                                                                                                                                                                                                                   |
 | Vault operations fail               | Run `klave deploy` to deploy the treasury program to devnet before using vault features                                                                                                                                                  |
 | Kora offline                        | Ensure `klave start --with-kora` was used. Check `kora.log` for errors. The Kora fee-payer needs SOL for gas.                                                                                                                            |

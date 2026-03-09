@@ -184,6 +184,11 @@ pub async fn execute_transaction(
         agent_id: agent_id.clone(),
     });
 
+    if policy_req.instruction_type == InstructionType::InitializeVault {
+        tracing::info!(agent_id = %agent.id, signature = %tx_sig, "waiting for vault initialization confirmation...");
+        state.kora_gateway.confirm_transaction(&tx_sig).await;
+    }
+
     spawn_transaction_confirmation_task(state.clone(), agent_id, agent_pubkey, vault_pda, tx_sig);
 
     ApiResponse::success(

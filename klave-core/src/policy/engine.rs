@@ -53,7 +53,7 @@ impl fmt::Display for PolicyViolation {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum InstructionType {
     SolTransfer,
     InitializeVault,

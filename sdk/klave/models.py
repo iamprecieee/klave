@@ -8,20 +8,20 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-TREASURY_PROGRAM_ID = "4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz"
+TREASURY_PROGRAM_ID = "3nKoeBAeLjcePc7pJPfdZpohsAbUR7U7pJ3HztovbyFx"
 SYSTEM_PROGRAM_ID = "11111111111111111111111111111111"
 
 
 class AgentPolicyInput(BaseModel):
     """Mutable input for creating/updating an agent's policy."""
 
-    allowed_programs: list[str] = []
-    max_lamports_per_tx: int = 1_000_000_000
-    token_allowlist: list[str] = []
-    daily_spend_limit_usd: float = 0.0
-    daily_swap_volume_usd: float = 0.0
-    slippage_bps: int = 50
-    withdrawal_destinations: list[str] = []
+    allowed_programs: list[str] | None = None
+    max_lamports_per_tx: int | None = None
+    token_allowlist: list[str] | None = None
+    daily_spend_limit_usd: float | None = None
+    daily_swap_volume_usd: float | None = None
+    slippage_bps: int | None = None
+    withdrawal_destinations: list[str] | None = None
 
 
 class CreateAgentRequest(BaseModel):

@@ -6,7 +6,7 @@ use anchor_lang::prelude::*;
 
 pub use instructions::*;
 
-declare_id!("4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz");
+declare_id!("3nKoeBAeLjcePc7pJPfdZpohsAbUR7U7pJ3HztovbyFx");
 
 #[program]
 pub mod klave_anchor {

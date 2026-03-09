@@ -174,7 +174,7 @@ class KlaveClient:
         data = await self._request(
             "PUT",
             f"/api/v1/agents/{agent_id}/policy",
-            json=policy.model_dump(),
+            json=policy.model_dump(exclude_none=True),
             use_operator_key=True,
         )
         return data

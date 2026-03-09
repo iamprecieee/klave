@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub const SYSTEM_PROGRAM_ID: &str = "11111111111111111111111111111111";
 pub const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-pub const TREASURY_PROGRAM_ID: &str = "4Z2GnoUJwG97f6Rhee3RcH1REsY2hKiaAzs7izrbC3nz";
+pub const TREASURY_PROGRAM_ID: &str = "3nKoeBAeLjcePc7pJPfdZpohsAbUR7U7pJ3HztovbyFx";
 pub const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,28 +38,13 @@ pub struct CreateAgentRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentPolicyInput {
-    #[serde(default)]
-    pub allowed_programs: Vec<String>,
-    #[serde(default = "default_max_lamports")]
-    pub max_lamports_per_tx: i64,
-    #[serde(default)]
-    pub token_allowlist: Vec<String>,
-    #[serde(default)]
-    pub daily_spend_limit_usd: f64,
-    #[serde(default)]
-    pub daily_swap_volume_usd: f64,
-    #[serde(default = "default_slippage_bps")]
-    pub slippage_bps: i32,
-    #[serde(default)]
-    pub withdrawal_destinations: Vec<String>,
-}
-
-fn default_max_lamports() -> i64 {
-    1_000_000_000 // 1 SOL
-}
-
-fn default_slippage_bps() -> i32 {
-    50 // 0.5%
+    pub allowed_programs: Option<Vec<String>>,
+    pub max_lamports_per_tx: Option<i64>,
+    pub token_allowlist: Option<Vec<String>>,
+    pub daily_spend_limit_usd: Option<f64>,
+    pub daily_swap_volume_usd: Option<f64>,
+    pub slippage_bps: Option<i32>,
+    pub withdrawal_destinations: Option<Vec<String>>,
 }
 
 pub fn default_programs() -> Vec<String> {

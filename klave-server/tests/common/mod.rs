@@ -87,13 +87,13 @@ pub async fn setup_test_agent(base_url: &str, client: &reqwest::Client) -> Strin
         .json(&serde_json::json!({
             "label": "test-agent",
             "policy": AgentPolicyInput {
-                allowed_programs: vec![],
-                max_lamports_per_tx: 0,
-                token_allowlist: vec![],
-                daily_spend_limit_usd: 0.0,
-                daily_swap_volume_usd: 0.0,
-                slippage_bps: 0,
-                withdrawal_destinations: vec![],
+                allowed_programs: Some(vec![]),
+                max_lamports_per_tx: Some(0),
+                token_allowlist: Some(vec![]),
+                daily_spend_limit_usd: Some(0.0),
+                daily_swap_volume_usd: Some(0.0),
+                slippage_bps: Some(0),
+                withdrawal_destinations: Some(vec![]),
             }
         }))
         .send()
